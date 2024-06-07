@@ -1,0 +1,24 @@
+From 910e721f9db940e06852c00f7a9653ee00176202 Mon Sep 17 00:00:00 2001
+From: "Brett T. Warden" <brett.t.warden@intel.com>
+Date: Fri, 7 Jun 2024 10:46:28 -0700
+Subject: [PATCH] Fix compile errors
+
+---
+ lib/melody.cc | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/lib/melody.cc b/lib/melody.cc
+index f50334d37ba5..2ef6bb8a17d1 100644
+--- a/lib/melody.cc
++++ b/lib/melody.cc
+@@ -2,6 +2,7 @@
+ #include "logger.hh"
+ 
+ #include <QRegularExpression>
++#include <cmath>
+ 
+ 
+ /* ********************************************************************************************* *
+-- 
+2.45.2
+
