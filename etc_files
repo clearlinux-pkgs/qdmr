@@ -1,0 +1,6 @@
+/etc/:
+/etc/udev/rules.d:
+/etc/udev:
+99-qdmr.rules
+rules.d
+udev
