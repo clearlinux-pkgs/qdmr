@@ -1,0 +1,93 @@
+From 7da68b720dd52c55a5fa818fe2f2a784ccaf3dce Mon Sep 17 00:00:00 2001
+From: Hannes Matuschek <hmatuschek@gmail.com>
+Date: Wed, 22 Jan 2025 21:33:33 +0100
+Subject: [PATCH] Fixed en/decoding of subtones in OpenGD77 firmwares. Also
+ added regression test. Addresses #549. (#552)
+
+---
+ lib/opengd77base_codeplug.cc |  9 +++++++--
+ test/opengd77_test.cc        | 28 ++++++++++++++++++++++++++++
+ test/opengd77_test.hh        |  2 ++
+ 3 files changed, 37 insertions(+), 2 deletions(-)
+
+diff --git a/lib/opengd77base_codeplug.cc b/lib/opengd77base_codeplug.cc
+index 992e1d4..3f6411b 100644
+--- a/lib/opengd77base_codeplug.cc
++++ b/lib/opengd77base_codeplug.cc
+@@ -40,7 +40,10 @@ OpenGD77BaseCodeplug::encodeSelectiveCall(const SelectiveCall &call) {
+     toneCode = call.mHz()/100;
+   }
+ 
+-  return (dcs<<15) | (inverted << 14) | (toneCode & 0x3fff);
++  uint16_t bcd = (((toneCode/100) % 10 ) << 8) |
++      (((toneCode/10) % 10 ) << 4) |
++      (((toneCode/1) % 10 )  << 0);
++  return (dcs<<15) | (inverted << 14) | (bcd & 0x3fff);
+ }
+ 
+ SelectiveCall
+@@ -50,7 +53,9 @@ OpenGD77BaseCodeplug::decodeSelectiveCall(uint16_t code) {
+ 
+   bool dcs = ((code >> 15) & 1),
+       inverted = ((code >> 14) & 1);
+-  code &= 0x3fff;
++
++  uint16_t bcd = (code & 0x3fff);
++  code = 100 * ((bcd >> 8) & 0xf) + 10 * ((bcd >> 4) & 0xf) + 1 * ((bcd >> 0) & 0xf);
+ 
+   if (! dcs)
+     return SelectiveCall(double(code)/10);
+diff --git a/test/opengd77_test.cc b/test/opengd77_test.cc
+index dc3b40b..9af6d98 100644
+--- a/test/opengd77_test.cc
++++ b/test/opengd77_test.cc
+@@ -138,5 +138,33 @@ OpenGD77Test::testOverrideChannelRadioId() {
+ }
+ 
+ 
++void
++OpenGD77Test::testChannelSubTones() {
++  ErrorStack err;
++  Config config, decoded;
++
++  if (! config.readYAML(":/data/fm_aprs_test.yaml", err)) {
++    QFAIL(QString("Cannot open codeplug file: %1")
++          .arg(err.format()).toLocal8Bit().constData());
++  }
++
++  config.channelList()->channel(0)->as<FMChannel>()->setTXTone(SelectiveCall(67.0));
++  config.channelList()->channel(0)->as<FMChannel>()->setRXTone(SelectiveCall(71.9));
++
++  if (! encodeDecode(config, decoded, err))
++    QFAIL(err.format().toLocal8Bit().constData());
++
++  SelectiveCall txTone = decoded.channelList()->channel(0)->as<FMChannel>()->txTone(),
++      rxTone = decoded.channelList()->channel(0)->as<FMChannel>()->rxTone();
++
++  QVERIFY(txTone.isValid());
++  QVERIFY(txTone.isCTCSS());
++  QCOMPARE(txTone.Hz(), 67.0);
++
++  QVERIFY(rxTone.isValid());
++  QVERIFY(rxTone.isCTCSS());
++  QCOMPARE(rxTone.Hz(), 71.9);
++}
++
+ QTEST_GUILESS_MAIN(OpenGD77Test)
+ 
+diff --git a/test/opengd77_test.hh b/test/opengd77_test.hh
+index 2be4ee6..9b34378 100644
+--- a/test/opengd77_test.hh
++++ b/test/opengd77_test.hh
+@@ -25,6 +25,8 @@ private slots:
+   void testChannelPowerSettings();
+   /** Regression test for #541. */
+   void testOverrideChannelRadioId();
++  /** Regression test for #549. */
++  void testChannelSubTones();
+ 
+ protected:
+   static bool encodeDecode(Config &config, Config &decoded, const ErrorStack &err=ErrorStack());
+-- 
+2.49.0
+

@@ -1,0 +1,140 @@
+From 60fcf22ababc87a46f4827b0847fbd3f0989506d Mon Sep 17 00:00:00 2001
+From: Hannes Matuschek <hmatuschek@gmail.com>
+Date: Mon, 10 Feb 2025 11:36:28 +0100
+Subject: [PATCH] Fixed bandwidth in CHIRP decoding. (#566)
+
+* Added regression test and fixed bandwidth in CHIRP decoding.
+---
+ lib/chirpformat.cc            |  1 +
+ test/chirptest.cc             | 56 +++++++++++++++++++++++++++++++++++
+ test/chirptest.hh             |  2 ++
+ test/data/chirp_bandwidth.csv |  3 ++
+ test/resources.qrc            |  1 +
+ 5 files changed, 63 insertions(+)
+ create mode 100644 test/data/chirp_bandwidth.csv
+
+diff --git a/lib/chirpformat.cc b/lib/chirpformat.cc
+index 828b804..6c87b7a 100644
+--- a/lib/chirpformat.cc
++++ b/lib/chirpformat.cc
+@@ -228,6 +228,7 @@ ChirpReader::processLine(const QStringList &header, const QStringList &line, Con
+   if ((Mode::FM == mode) || (Mode::NFM == mode)) {
+     FMChannel *fm = new FMChannel();
+ 
++    fm->setBandwidth(Mode::FM == mode ? FMChannel::Bandwidth::Wide : FMChannel::Bandwidth::Narrow);
+     fm->setName(name);
+     fm->setRXFrequency(rxFrequency);
+ 
+diff --git a/test/chirptest.cc b/test/chirptest.cc
+index e8c58c9..67c848c 100644
+--- a/test/chirptest.cc
++++ b/test/chirptest.cc
+@@ -142,6 +142,29 @@ ChirpTest::testReaderCross()
+ }
+ 
+ 
++void
++ChirpTest::testReaderBandwidth() {
++
++  QFile file(":/data/chirp_bandwidth.csv");
++  if (! file.open(QIODevice::ReadOnly)) {
++    QFAIL("Cannot open CHRIP file.");
++  }
++
++  QTextStream stream(&file);
++  Config config;
++  ErrorStack err;
++
++  if (! ChirpReader::read(stream, &config, err)) {
++    QFAIL(QString("Cannot read codeplug file:\n%1").arg(err.format()).toStdString().c_str());
++  }
++
++  QCOMPARE(config.channelList()->count(), 2);
++  QVERIFY(config.channelList()->channel(0)->is<FMChannel>());
++  QCOMPARE(config.channelList()->channel(0)->as<FMChannel>()->bandwidth(), FMChannel::Bandwidth::Wide);
++  QCOMPARE(config.channelList()->channel(1)->as<FMChannel>()->bandwidth(), FMChannel::Bandwidth::Narrow);
++}
++
++
+ void
+ ChirpTest::testWriterBasic() {
+   Config orig;
+@@ -281,4 +304,37 @@ ChirpTest::testWriterCross() {
+ }
+ 
+ 
++void
++ChirpTest::testWriterBandwidth() {
++  Config orig;
++
++  FMChannel *fm0 = new FMChannel();
++  fm0->setName("DB0SP"); fm0->setRXFrequency(Frequency::fromMHz(145.6)); fm0->setTXFrequency(Frequency::fromMHz(145.0));
++  fm0->setBandwidth(FMChannel::Bandwidth::Wide);
++  orig.channelList()->add(fm0);
++
++  FMChannel *fm1 = new FMChannel();
++  fm1->setName("DB0SP"); fm1->setRXFrequency(Frequency::fromMHz(145.6)); fm1->setTXFrequency(Frequency::fromMHz(145.0));
++  fm1->setBandwidth(FMChannel::Bandwidth::Narrow);
++  orig.channelList()->add(fm1);
++
++  QString csv;
++  QTextStream stream(&csv);
++  ErrorStack err;
++  if (! ChirpWriter::write(stream, &orig, err))
++    QFAIL(QString("Cannot serialize codeplug:\n%1").arg(err.format()).toStdString().c_str());
++  qDebug() << csv;
++
++  Config parsed;
++  if (! ChirpReader::read(stream, &parsed, err))
++    QFAIL(QString("Cannot parse CHIRP CSV:\n%1").arg(err.format()).toStdString().c_str());
++
++  FMChannel *pfm0 = parsed.channelList()->channel(0)->as<FMChannel>();
++  QCOMPARE(pfm0->bandwidth(), fm0->bandwidth());
++
++  FMChannel *pfm1 = parsed.channelList()->channel(1)->as<FMChannel>();
++  QCOMPARE(pfm1->bandwidth(), fm1->bandwidth());
++}
++
++
+ QTEST_GUILESS_MAIN(ChirpTest)
+diff --git a/test/chirptest.hh b/test/chirptest.hh
+index c850566..9cfbed1 100644
+--- a/test/chirptest.hh
++++ b/test/chirptest.hh
+@@ -15,11 +15,13 @@ private slots:
+   void testReaderCTCSS();
+   void testReaderDCS();
+   void testReaderCross();
++  void testReaderBandwidth();
+ 
+   void testWriterBasic();
+   void testWriterCTCSS();
+   void testWriterDCS();
+   void testWriterCross();
++  void testWriterBandwidth();
+ };
+ 
+ #endif // CHIRPTEST_HH
+diff --git a/test/data/chirp_bandwidth.csv b/test/data/chirp_bandwidth.csv
+new file mode 100644
+index 0000000..60c036a
+--- /dev/null
++++ b/test/data/chirp_bandwidth.csv
+@@ -0,0 +1,3 @@
++Location,Name,Frequency,Duplex,Offset,Tone,rToneFreq,cToneFreq,DtcsCode,DtcsPolarity,RxDtcsCode,CrossMode,Mode,TStep,Skip,Power,Comment,URCALL,RPT1CALL,RPT2CALL,DVCODE
++0,KD8BMI,147.075000,+,0.600000,Tone,103.5,77.0,023,NN,023,Tone->Tone,FM,5.00,,50W,,,,,
++1,KD8BMI,147.075000,+,0.600000,Tone,103.5,77.0,023,NN,023,Tone->Tone,NFM,5.00,,50W,,,,,
+diff --git a/test/resources.qrc b/test/resources.qrc
+index b4fb0a9..71ba8b4 100644
+--- a/test/resources.qrc
++++ b/test/resources.qrc
+@@ -15,5 +15,6 @@
+         <file>data/chirp_dcs.csv</file>
+         <file>data/fm_aprs_test.yaml</file>
+         <file>data/ctcss_null_test.yaml</file>
++        <file>data/chirp_bandwidth.csv</file>
+     </qresource>
+ </RCC>
+-- 
+2.49.0
+

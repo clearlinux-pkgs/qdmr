@@ -1,0 +1,25 @@
+From 36f9260ef1bf85013e0600255550597e4444b60f Mon Sep 17 00:00:00 2001
+From: Hannes Matuschek <hmatuschek@gmail.com>
+Date: Fri, 3 Jan 2025 14:06:07 +0100
+Subject: [PATCH] Update README.md
+
+---
+ README.md | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/README.md b/README.md
+index b2449a9..db4734d 100644
+--- a/README.md
++++ b/README.md
+@@ -47,7 +47,7 @@ tools, that make your day-to-day useage of *qdmr* easier, by providing features,
+ qdmr or dmrconf.
+ 
+   * **[dmrfill](https://github.com/jancona/dmrfill)** -- Automatically extemds a qdmr YAML file with repeaters from a selected region. Get them all with one single command.
+-  * **[anytone-emu](https://github.com/dmr-tools/anytone-emu) -- A tool for emulating radios, reverse engineering and documenting codeplugs. Also generates some [codeplug documentation](https://dmr-tools.github.io/codeplugs/).
++  * **[anytone-emu](https://github.com/dmr-tools/anytone-emu)** -- A tool for emulating radios, reverse engineering and documenting codeplugs. Also generates some [codeplug documentation](https://dmr-tools.github.io/codeplugs/).
+   
+ 
+ ## Releases
+-- 
+2.49.0
+

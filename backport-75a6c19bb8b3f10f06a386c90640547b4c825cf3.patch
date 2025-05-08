@@ -1,0 +1,26 @@
+From 75a6c19bb8b3f10f06a386c90640547b4c825cf3 Mon Sep 17 00:00:00 2001
+From: Hannes Matuschek <hmatuschek@gmail.com>
+Date: Sun, 23 Feb 2025 22:39:35 +0100
+Subject: [PATCH] Fixed manual.
+
+---
+ doc/manual/codeplug/anytone/settings.xml | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/doc/manual/codeplug/anytone/settings.xml b/doc/manual/codeplug/anytone/settings.xml
+index 98f23ab..24ecad3 100644
+--- a/doc/manual/codeplug/anytone/settings.xml
++++ b/doc/manual/codeplug/anytone/settings.xml
+@@ -846,7 +846,8 @@
+     <term><token>backlightDuration</token>, <token>backlightDurationRX</token>, 
+       <token>backlightDurationTX</token></term>
+     <listitem>
+-      <para>Specifies the backlight duration. </para>
++      <para>Specifies the backlight duration. While setting the TX backlight duration to 0 disables
++      it during TX, setting the RX backlight duration to that value, enables it continously.</para>
+     </listitem>
+   </varlistentry>
+   <varlistentry>
+-- 
+2.49.0
+

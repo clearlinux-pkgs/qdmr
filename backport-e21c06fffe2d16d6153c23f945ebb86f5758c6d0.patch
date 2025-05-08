@@ -1,0 +1,25 @@
+From e21c06fffe2d16d6153c23f945ebb86f5758c6d0 Mon Sep 17 00:00:00 2001
+From: Hannes Matuschek <hmatuschek@gmail.com>
+Date: Sun, 23 Feb 2025 22:39:02 +0100
+Subject: [PATCH] Fixed RX backlight duration settings documentation. (#573)
+
+---
+ lib/anytone_extension.hh | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/lib/anytone_extension.hh b/lib/anytone_extension.hh
+index c17f6e4..c62c6d3 100644
+--- a/lib/anytone_extension.hh
++++ b/lib/anytone_extension.hh
+@@ -925,7 +925,7 @@ class AnytoneDisplaySettingsExtension: public ConfigItem
+   Q_PROPERTY(Interval backlightDurationTX READ backlightDurationTX WRITE setBacklightDurationTX)
+ 
+   Q_CLASSINFO("backlightDurationRX", "The duration in seconds, the backlight is lit during RX. "
+-                                     "A value of 0 means off.")
++                                     "A value of 0 means always on.")
+   /** RX backlight duration. */
+   Q_PROPERTY(Interval backlightDurationRX READ backlightDurationRX WRITE setBacklightDurationRX)
+ 
+-- 
+2.49.0
+

@@ -1,0 +1,819 @@
+From 0863cebeda7c543cfc0e25e2dcc7e6de11ece9a4 Mon Sep 17 00:00:00 2001
+From: Hannes Matuschek <hmatuschek@gmail.com>
+Date: Fri, 10 Jan 2025 14:16:41 +0100
+Subject: [PATCH] Updated API docs (#544)
+
+* Updated API docs.
+---
+ lib/anytone_extension.hh       |  1 +
+ lib/c7000device.cc             |  2 +-
+ lib/c7000device.hh             |  6 +++
+ lib/configmergevisitor.hh      |  1 +
+ lib/d878uv_codeplug.hh         |  3 +-
+ lib/dmr6x2uv_codeplug.hh       |  3 +-
+ lib/encryptionextension.hh     |  1 +
+ lib/gd73_codeplug.hh           |  5 +++
+ lib/opengd77_callsigndb.hh     |  8 ++--
+ lib/opengd77_interface.hh      |  1 +
+ lib/opengd77base_codeplug.hh   | 26 +++++++++----
+ lib/openuv380_callsigndb.hh    |  8 ++--
+ lib/orbitalelementsdatabase.hh | 45 ++++++++++++++++++++++
+ lib/radioddity_codeplug.hh     |  1 +
+ lib/radioddity_extensions.hh   |  1 +
+ lib/satellitedatabase.cc       |  3 +-
+ lib/satellitedatabase.hh       | 68 +++++++++++++++++++++++++++++++---
+ lib/signaling.hh               |  3 +-
+ lib/transponderdatabase.hh     | 48 ++++++++++++++++++++++--
+ lib/tyt_codeplug.hh            |  1 +
+ 20 files changed, 203 insertions(+), 32 deletions(-)
+
+diff --git a/lib/anytone_extension.hh b/lib/anytone_extension.hh
+index 01df1f8..c17f6e4 100644
+--- a/lib/anytone_extension.hh
++++ b/lib/anytone_extension.hh
+@@ -119,6 +119,7 @@ public:
+   /** Holds the APRS PTT mode. That his, if and when the APRS information is send via the
+    * associated APRS system. */
+   APRSPTT aprsPTT() const;
++  /** Sets the APRS PTT mode. */
+   void setAPRSPTT(APRSPTT mode);
+ 
+ protected:
+diff --git a/lib/c7000device.cc b/lib/c7000device.cc
+index 37bdf45..e23d9be 100644
+--- a/lib/c7000device.cc
++++ b/lib/c7000device.cc
+@@ -96,7 +96,7 @@ C7000Device::Packet::payloadSize() const {
+ 
+ QByteArray
+ C7000Device::Packet::payload() const {
+-  return _encoded.mid(8,payloadSize());
++  return _encoded.mid(8, payloadSize());
+ }
+ 
+ const QByteArray &
+diff --git a/lib/c7000device.hh b/lib/c7000device.hh
+index 636c4ba..7bfd0de 100644
+--- a/lib/c7000device.hh
++++ b/lib/c7000device.hh
+@@ -32,11 +32,17 @@ public:
+     /** Returns @c true, if the packet is valid. */
+     bool isValid() const;
+ 
++    /** Returns the flags field. */
+     uint8_t flags() const;
++    /** Returns the command field. */
+     uint8_t command() const;
++    /** Returns the sub-command field. */
+     uint8_t subcommand() const;
++    /** Returns the payload size. */
+     uint16_t payloadSize() const;
++    /** Returns the payload field. */
+     QByteArray payload() const;
++    /** Returns the encoded packet. */
+     const QByteArray &encoded() const;
+ 
+   protected:
+diff --git a/lib/configmergevisitor.hh b/lib/configmergevisitor.hh
+index 41b5a6d..ce89fda 100644
+--- a/lib/configmergevisitor.hh
++++ b/lib/configmergevisitor.hh
+@@ -44,6 +44,7 @@ public:
+   /** Constructor of the merge visitor.
+    * @param destination Specifies the destination configuration, the additional configurations are
+    *        merged into.
++   * @param translation Specifies the translation table to fill of objects being replaced.
+    * @param itemStrategy Specifies the item merge strategy.
+    * @param setStrategy Specifies the set merge strategy. */
+   ConfigMergeVisitor(Config *destination, QHash<ConfigObject *, ConfigObject *> &translation,
+diff --git a/lib/d878uv_codeplug.hh b/lib/d878uv_codeplug.hh
+index 9c3cf8e..0abe430 100644
+--- a/lib/d878uv_codeplug.hh
++++ b/lib/d878uv_codeplug.hh
+@@ -1176,8 +1176,7 @@ public:
+   };
+ 
+ 
+-  /** Implements some storage to hold the names for the FM APRS frequencies.
+-   * @verbinclude d878uv_fm_aprs_frequency_names.txt */
++  /** Implements some storage to hold the names for the FM APRS frequencies. */
+   class FMAPRSFrequencyNamesElement: public Element
+   {
+   protected:
+diff --git a/lib/dmr6x2uv_codeplug.hh b/lib/dmr6x2uv_codeplug.hh
+index d113bf5..37a3bef 100644
+--- a/lib/dmr6x2uv_codeplug.hh
++++ b/lib/dmr6x2uv_codeplug.hh
+@@ -916,8 +916,9 @@ public:
+     bool fromChannelObj(const Channel *c, Context &ctx);
+ 
+ public:
++    /** Some limits of this element. */
+     struct Limit {
+-      // Maximum number of scan list indices.
++      /// Maximum number of scan list indices.
+       static constexpr unsigned int scanListIndices() { return 8; }
+     };
+ 
+diff --git a/lib/encryptionextension.hh b/lib/encryptionextension.hh
+index a758445..ebae09e 100644
+--- a/lib/encryptionextension.hh
++++ b/lib/encryptionextension.hh
+@@ -139,6 +139,7 @@ public:
+ 
+   int add(ConfigObject *obj, int row=-1, bool unique=true);
+ 
++  /** Returns the key the given index. */
+   EncryptionKey *key(int index) const;
+ 
+   ConfigItem *allocateChild(const YAML::Node &node, ConfigItem::Context &ctx, const ErrorStack &err=ErrorStack());
+diff --git a/lib/gd73_codeplug.hh b/lib/gd73_codeplug.hh
+index b813260..1c73169 100644
+--- a/lib/gd73_codeplug.hh
++++ b/lib/gd73_codeplug.hh
+@@ -183,9 +183,12 @@ public:
+     /** Possible programmable key function. */
+     struct KeyFunction {
+     public:
++      /** Encodes the given function. */
+       static uint8_t encode(RadioddityButtonSettingsExtension::Function func);
++      /** Decodes the given function code. */
+       static RadioddityButtonSettingsExtension::Function decode(uint8_t code);
+     protected:
++      /** Possible function codes. */
+       enum Code {
+         None=0, RadioEnable=1, RadioCheck=2, RadioDisable=3, PowerLevel=4,
+         Monitor=5, EmergencyOn=6, EmergencyOff=7, ZoneSwitch=8, ToggleScan=9, ToggleVOX=10,
+@@ -1275,7 +1278,9 @@ public:
+     /** Sets the key size in bits. */
+     void setKeySize(unsigned int size);
+ 
++    /** Decodes the encryption key. */
+     BasicEncryptionKey *createEncryptionKey(const ErrorStack &err=ErrorStack()) const;
++    /** Encodes the encryption key. */
+     bool encodeEncryptionKey(BasicEncryptionKey *key, const ErrorStack &err=ErrorStack());
+ 
+   protected:
+diff --git a/lib/opengd77_callsigndb.hh b/lib/opengd77_callsigndb.hh
+index 5c62aba..f41853e 100644
+--- a/lib/opengd77_callsigndb.hh
++++ b/lib/opengd77_callsigndb.hh
+@@ -28,14 +28,12 @@ public:
+   bool encode(UserDatabase *calldb, const Selection &selection=Selection(),
+               const ErrorStack &err=ErrorStack());
+ 
+-public:
+-  struct Limit: public OpenGD77BaseCallsignDB::Limit {
+-
+-  };
+-
+ protected:
++  /** Some internal offsets within the callsign db. */
+   struct Offset {
++    /// @cond DO_NOT_DOCUMENT
+     static constexpr unsigned int callsignDB() { return 0x30000; }
++    /// @endcond
+   };
+ };
+ 
+diff --git a/lib/opengd77_interface.hh b/lib/opengd77_interface.hh
+index 8a61de4..84a4986 100644
+--- a/lib/opengd77_interface.hh
++++ b/lib/opengd77_interface.hh
+@@ -161,6 +161,7 @@ public:
+   /** The Flash memory bank. */
+   static const uint32_t FLASH  = 1;
+ 
++  /** Specifies the detected model variant. */
+   enum class Variant {
+     GD77, UV380
+   };
+diff --git a/lib/opengd77base_codeplug.hh b/lib/opengd77base_codeplug.hh
+index 19758db..866e10a 100644
+--- a/lib/opengd77base_codeplug.hh
++++ b/lib/opengd77base_codeplug.hh
+@@ -10,7 +10,8 @@
+ 
+ #include <QGeoCoordinate>
+ 
+-
++/** Base codeplug for all OpenGD77 based firmware variants.
++ * @ingroup ogd77 */
+ class OpenGD77BaseCodeplug : public Codeplug
+ {
+   Q_OBJECT
+@@ -31,8 +32,7 @@ public:
+   static SelectiveCall decodeSelectiveCall(uint16_t code);
+ 
+ public:
+-  /** Implements the base for all OpenGD77 channel encodings.
+-   */
++  /** Implements the base for all OpenGD77 channel encodings. */
+   class ChannelElement: public Codeplug::Element
+   {
+   public:
+@@ -265,6 +265,7 @@ public:
+       static constexpr Bit skipZoneScan() { return {0x0033, 5}; }
+       static constexpr Bit vox() { return {0x0033, 6}; }
+       static constexpr unsigned int squelch() { return 0x0037; }
++      /// @endcond
+     };
+   };
+ 
+@@ -459,10 +460,12 @@ public:
+   class APRSSettingsElement: public Element
+   {
+   public:
++    /** Possible APRS baud rates. */
+     enum class BaudRate {
+       Baud300 = 1, Baud1200 = 0
+     };
+ 
++    /** Possible position precisions. */
+     enum class PositionPrecision {
+       Max = 0,
+       Mask1_8sec = 1,
+@@ -563,14 +566,17 @@ public:
+   public:
+     /** Some limits. */
+     struct Limit: public Element::Limit {
++      /** The maximum name length in chars. */
+       static constexpr unsigned int nameLength() { return 8; }
++      /** The maximum comment length in chars. */
+       static constexpr unsigned int commentLength() { return 23; }
+     };
+ 
+   protected:
+-    /// @cond DO_NOT_DOCUMENT
++    /** Some internal offsets within the element. */
+     struct Offset: public Element::Offset
+     {
++      /// @cond DO_NOT_DOCUMENT
+       static constexpr unsigned int name() { return 0x0000; }
+       static constexpr unsigned int sourceSSID() { return 0x0008; }
+       static constexpr unsigned int latitude() { return 0x0009; }
+@@ -585,8 +591,8 @@ public:
+       static constexpr Bit positionPrecision() { return { 0x003d, 4}; }
+       static constexpr Bit useFixedPosition() { return { 0x003d, 1}; }
+       static constexpr Bit baudRate() { return { 0x003d, 0}; }
++      /// @endcond
+     };
+-    /// @endcond
+   };
+ 
+ 
+@@ -908,6 +914,7 @@ public:
+   };
+ 
+ 
++  /** Encodes an orbital element of OpenGD77 devices. */
+   class OrbitalElement: public Element
+   {
+   protected:
+@@ -1067,8 +1074,11 @@ public:
+   class ContactElement: public Element
+   {
+   public:
++    /** Possible modes of time slot override. */
+     enum class TimeSlotOverride {
+-      None, TS1, TS2
++      None, ///< Do not override time slot.
++      TS1,  ///< Override with time slot 1.
++      TS2   ///< Override with time slot 2.
+     };
+ 
+   protected:
+@@ -1293,9 +1303,11 @@ public:
+   };
+ 
+ 
+-public:
++protected:
++  /** Default hidden constructor. */
+   explicit OpenGD77BaseCodeplug(QObject *parent = nullptr);
+ 
++public:
+   /** Clears and resets the complete codeplug to some default values. */
+   virtual void clear();
+ 
+diff --git a/lib/openuv380_callsigndb.hh b/lib/openuv380_callsigndb.hh
+index f81b156..85cd39d 100644
+--- a/lib/openuv380_callsigndb.hh
++++ b/lib/openuv380_callsigndb.hh
+@@ -28,14 +28,12 @@ public:
+   bool encode(UserDatabase *calldb, const Selection &selection=Selection(),
+               const ErrorStack &err=ErrorStack());
+ 
+-public:
+-  struct Limit: public OpenGD77BaseCallsignDB::Limit {
+-
+-  };
+-
+ protected:
++  /** Some internal offsets within the callsign db. */
+   struct Offset {
++    /// @cond DO_NOT_DOCUMENT
+     static constexpr unsigned int callsignDB() { return 0x00050000; }
++    /// @endcond
+   };
+ };
+ 
+diff --git a/lib/orbitalelementsdatabase.hh b/lib/orbitalelementsdatabase.hh
+index dd3c976..979111a 100644
+--- a/lib/orbitalelementsdatabase.hh
++++ b/lib/orbitalelementsdatabase.hh
+@@ -1,3 +1,6 @@
++/** @defgroup sat Satellite tracking settings.
++ * @ingroup conf */
++
+ #ifndef ORBITALELEMENTSDATABASE_HH
+ #define ORBITALELEMENTSDATABASE_HH
+ 
+@@ -5,16 +8,27 @@
+ #include <QNetworkAccessManager>
+ 
+ 
++/** Defines a single orbital element, enabling the tracking of a single satellite. This dataset
++ * does not contain any transponder information.
++ * @ingroup sat */
+ class OrbitalElement
+ {
+ public:
++  /** Represents a Julien day epoch since a specified year. */
+   struct Epoch {
++    /** The year of the epoch. */
+     unsigned int year;
++    /** The month. */
+     unsigned int month;
++    /** The day. */
+     unsigned int day;
++    /** The hour. */
+     unsigned int hour;
++    /** The minute. */
+     unsigned int minute;
++    /** The second. */
+     unsigned int second;
++    /** The microsecond. */
+     unsigned int microsecond;
+ 
+     /** Default constructor. */
+@@ -27,8 +41,11 @@ public:
+     /** Copy assignment. */
+     Epoch &operator =(const Epoch &other) = default;
+ 
++    /** Parses a date-time string into the epoch. */
+     static Epoch parse(const QString &datetime);
++    /** Computes the decimal epoch as the day of year a  */
+     double toEpoch() const;
++    /** Encodes the Epoch as YYYY-MM-DDThh:mm:ss.uuuuuu. */
+     QString toString() const;
+   };
+ 
+@@ -69,41 +86,68 @@ public:
+   unsigned int revolutionNumber() const;
+ 
+ public:
++  /** Constructs a orbital element from a CelesTrak JSON object. */
+   static OrbitalElement fromCelesTrak(const QJsonObject &obj);
+ 
+ protected:
++  /** NORAD id of the satellite. */
+   unsigned int _id;
++  /** Desriptive name of the satellite. */
+   QString _name;
++  /** The epoch. */
+   Epoch _epoch;
++  /** Mean motion. */
+   double _meanMotion;
++  /** First derivative of the mean motion. */
+   double _meanMotionDerivative;
++  /** Inclination. */
+   double _inclination;
++  /** Right ascension of the ascending node. */
+   double _ascension;
++  /** Eccentricity. */
+   double _eccentricity;
++  /** Argument of perigee. */
+   double _perigee;
++  /** Mean anomaly. */
+   double _meanAnomaly;
++  /** The revolution number. */
+   unsigned int _revolutionNumber;
+ };
+ 
+ 
+ 
++/** Downloads and updates a database of orbital elements from CelesTrak.
++ * @ingroup sat */
+ class OrbitalElementsDatabase: public QAbstractTableModel
+ {
+   Q_OBJECT
+ 
+ public:
++  /** Constructs a orbital element database.
++   * @param autoLoad [in] If @c true, the database gets downloaded and loaded automatically.
++   * @param updatePeriodDays [in] Specifies the max age of the local database cache in days.
++   * @param parent [in] Specifies the QObject parent. */
+   explicit OrbitalElementsDatabase(bool autoLoad, unsigned int updatePeriodDays=7, QObject *parent=nullptr);
+ 
++  /** @c returns @c true if the database contains a satellite with the given NORAD id. */
+   bool contains(unsigned int id) const;
++  /** Retunrs the orbital elements for the satellite with the given NORAD id. */
+   OrbitalElement getById(unsigned int id) const;
++  /** Returns the i-th orbital element. */
+   const OrbitalElement &getAt(unsigned int idx) const;
++  /** Returns the i-th orbital element. */
+   OrbitalElement &getAt(unsigned int idx);
+ 
++  /** Returns the current age of the cache. */
+   unsigned int dbAge() const;
++  /** If needed, downloads the database and loads all received orbital elements. */
+   void load();
+ 
++  /** Returns the number of elements in the database. */
+   int rowCount(const QModelIndex &parent = QModelIndex()) const;
++  /** Returns the number of columns of the database table. */
+   int columnCount(const QModelIndex &parent = QModelIndex()) const;
++  /** Returns a single cell of the database table. */
+   QVariant data(const QModelIndex &index, int role) const;
+ 
+ signals:
+@@ -121,6 +165,7 @@ private slots:
+   void downloadFinished(QNetworkReply *reply);
+ 
+ protected:
++  /** Loads a database from the given filename. */
+   bool load(const QString &filename);
+ 
+ private:
+diff --git a/lib/radioddity_codeplug.hh b/lib/radioddity_codeplug.hh
+index cc72005..4da555d 100644
+--- a/lib/radioddity_codeplug.hh
++++ b/lib/radioddity_codeplug.hh
+@@ -263,6 +263,7 @@ public:
+       static constexpr Bit talkaround() { return {0x0033, 3}; }
+       static constexpr Bit vox() { return {0x0033, 6}; }
+       static constexpr Bit power() { return {0x0033, 7}; }
++      /// @endcond
+     };
+   };
+ 
+diff --git a/lib/radioddity_extensions.hh b/lib/radioddity_extensions.hh
+index 9f5f007..96c9ebc 100644
+--- a/lib/radioddity_extensions.hh
++++ b/lib/radioddity_extensions.hh
+@@ -38,6 +38,7 @@ public:
+   Q_ENUM(Function)
+ 
+ public:
++  /** Default constructor. */
+   explicit RadioddityButtonSettingsExtension(QObject *parent=nullptr);
+ 
+   ConfigItem *clone() const;
+diff --git a/lib/satellitedatabase.cc b/lib/satellitedatabase.cc
+index 6da5a56..3f2cfe7 100644
+--- a/lib/satellitedatabase.cc
++++ b/lib/satellitedatabase.cc
+@@ -25,7 +25,7 @@ Satellite::Satellite()
+ }
+ 
+ Satellite::Satellite(const OrbitalElement &orbit)
+-  : OrbitalElement(orbit), _name(orbit.name()),
++  : OrbitalElement(orbit), _name(),
+     _fmUplink(), _fmDownlink(), _fmUplinkTone(), _fmDownlinkTone(),
+     _aprsUplink(), _aprsDownlink(), _aprsUplinkTone(), _aprsDownlinkTone(), _beacon()
+ {
+@@ -43,6 +43,7 @@ Satellite::setName(const QString &name) {
+   _name = name.simplified();
+ }
+ 
++
+ const Frequency &
+ Satellite::fmUplink() const {
+   return _fmUplink;
+diff --git a/lib/satellitedatabase.hh b/lib/satellitedatabase.hh
+index 590ff4e..95b7349 100644
+--- a/lib/satellitedatabase.hh
++++ b/lib/satellitedatabase.hh
+@@ -8,85 +8,141 @@
+ #include "orbitalelementsdatabase.hh"
+ 
+ 
+-
++/** Extends the @c OrbitalElement to include transponder information for a satellite.
++ *
++ * This represents a single user-curated satellite. The orbital elements are updated automatically,
++ * while the transponder information remains set by the user.
++ *
++ * @ingroup sat */
+ class Satellite: public OrbitalElement
+ {
+ public:
++  /** Default constructor. */
+   Satellite();
++  /** Constructor from orbital element. */
+   Satellite(const OrbitalElement &orbit);
+-
++  /** Copy constructor. */
+   Satellite(const Satellite &sat) = default;
++  /** Copy assignment. */
+   Satellite &operator =(const Satellite &other) = default;
+ 
++  /** Returns the name of the satellite. */
+   const QString &name() const;
++  /** Sets the name of the satellite. */
+   void setName(const QString &name);
+ 
++  /** Returns the FM uplink frequency. */
+   const Frequency &fmUplink() const;
++  /** Sets the FM uplink frequency. */
+   void setFMUplink(const Frequency &f);
++  /** Returns the FM downlink frequency. */
+   const Frequency &fmDownlink() const;
++  /** Sets the FM downlink frequency. */
+   void setFMDownlink(const Frequency &f);
++  /** Returns the FM uplink tone (i.e., TX tone). */
+   const SelectiveCall &fmUplinkTone() const;
++  /** Returns the FM downlink tone (i.e., RX tone). */
+   const SelectiveCall &fmDownlinkTone() const;
+ 
++  /** Returns the APRS uplink frequency. */
+   const Frequency &aprsUplink() const;
++  /** Sets the APRS uplink frequency. */
+   void setAPRSUplink(const Frequency &f);
++  /** Returns the APRS downlink frequency. */
+   const Frequency &aprsDownlink() const;
++  /** Sets the APRS downlink frequency. */
+   void setAPRSDownlink(const Frequency &f);
++  /** Returns the APRS uplink tone (i.e., TX tone). */
+   const SelectiveCall &aprsUplinkTone() const;
++  /** Returns the APRS downlink tone (i.e., RX tone). */
+   const SelectiveCall &aprsDownlinkTone() const;
+ 
++  /** Returns a beacon frequency. */
+   const Frequency &beacon() const;
++  /** Sets a beacon frequency. */
+   void setBeacon(const Frequency &f);
+ 
++  /** Serializes the satellite into a JSON object. */
+   QJsonObject toJson() const;
+ 
+ public:
++  /** Constructs a satellite from the given JSON object and orbital element database. */
+   static Satellite fromJson(const QJsonObject &obj, const OrbitalElementsDatabase &db);
+ 
+ protected:
++  /** Holds the name of the satellite. */
+   QString _name;
++  /** Holds the FM uplink frequency. */
+   Frequency _fmUplink;
++  /** Holds the FM downlink frequency. */
+   Frequency _fmDownlink;
++  /** Holds the FM uplink tone. */
+   SelectiveCall _fmUplinkTone;
++  /** Holds the FM downlink tone. */
+   SelectiveCall _fmDownlinkTone;
++  /** Holds the APRS uplink frequency. */
+   Frequency _aprsUplink;
++  /** Holds the APRS downlink frequency. */
+   Frequency _aprsDownlink;
++  /** Holds the APRS uplink tone. */
+   SelectiveCall _aprsUplinkTone;
++  /** Holds the APRS downlink tone. */
+   SelectiveCall _aprsDownlinkTone;
++  /** Holds a beacon frequency. */
+   Frequency _beacon;
+ };
+ 
+ 
+ 
+ /** A table holding all known satellites.
+- * This table merges oribtal with transponder information. */
++ * This table merges oribtal with transponder information.
++ * @ingroup sat */
+ class SatelliteDatabase : public QAbstractTableModel
+ {
+   Q_OBJECT
+ 
+ public:
++  /** Constructs a new satellite database. */
+   explicit SatelliteDatabase(unsigned int updatePeriodDays=7, QObject *parent = nullptr);
+ 
++  /** Returns the orbital element database. */
+   const OrbitalElementsDatabase &orbitalElements() const;
++  /** Returns the orbital element database. */
+   OrbitalElementsDatabase &orbitalElements();
++  /** Returns the transponder database. */
+   const TransponderDatabase &transponders() const;
++  /** Returns the transponder database. */
+   TransponderDatabase &transponders();
+ 
++  /** Returns the number of configured satellites. */
+   unsigned int count() const;
++  /** Returns the i-th satellite. */
+   const Satellite &getAt(unsigned int idx) const;
++  /** Appends a satellite. */
+   void add(const Satellite &sat);
++  /** Removes one or more satellites. */
+   bool removeRows(int row, int count, const QModelIndex &parent=QModelIndex());
+ 
++  /** Implements the QAbstractTableModel interface. Returns some flags for the given cell. */
+   Qt::ItemFlags flags(const QModelIndex &index) const;
+-  int rowCount(const QModelIndex &parent) const;
+-  int columnCount(const QModelIndex &parent) const;
++  /** Implements the QAbstractTableModel interface.
++   * Returns the number of rows in the table. That is, the number of satellites. */
++  int rowCount(const QModelIndex &parent=QModelIndex()) const;
++  /** Implements the QAbstractTableModel interface. Returns the number of columns in the table. */
++  int columnCount(const QModelIndex &parent=QModelIndex()) const;
++  /** Implements the QAbstractTableModel interface. Returns the header labels. */
+   QVariant headerData(int section, Qt::Orientation orientation, int role) const;
++  /** Implements the QAbstractTableModel interface. Returns the data for the cell. */
+   QVariant data(const QModelIndex &index, int role) const;
++  /** Implements the QAbstractTableModel interface. Sets the data for a cell. */
+   bool setData(const QModelIndex &index, const QVariant &value, int role);
+ 
+ public slots:
++  /** Triggers a download of the orbital and transponder databases. */
+   void update();
++  /** Loads the user-curated satellite database. */
+   void load();
++  /** Saves the user-curated satellite database. */
+   bool save(const ErrorStack &err = ErrorStack()) const;
+ 
+ signals:
+@@ -98,7 +154,9 @@ signals:
+ private:
+   /** Holds all sattellites sorted by their catalog number. */
+   QVector<Satellite>  _satellites;
++  /** Holds the orbital element database. */
+   OrbitalElementsDatabase _orbitalElements;
++  /** Holds the transponder database. */
+   TransponderDatabase _transponders;
+ };
+ 
+diff --git a/lib/signaling.hh b/lib/signaling.hh
+index cd8f545..c24b786 100644
+--- a/lib/signaling.hh
++++ b/lib/signaling.hh
+@@ -12,6 +12,7 @@
+ struct SelectiveCall
+ {
+ protected:
++  /** Type of the subtone. */
+   enum class Type {
+     None, CTCSS, DCS
+   };
+@@ -78,10 +79,10 @@ protected:
+   };
+ 
+ protected:
++  /** Fixed table of standard values. */
+   static QVector<SelectiveCall> _standard;
+ };
+ 
+-
+ Q_DECLARE_METATYPE(SelectiveCall)
+ 
+ 
+diff --git a/lib/transponderdatabase.hh b/lib/transponderdatabase.hh
+index 79df679..8fe50e7 100644
+--- a/lib/transponderdatabase.hh
++++ b/lib/transponderdatabase.hh
+@@ -7,70 +7,109 @@
+ #include "frequency.hh"
+ 
+ 
+-
++/** Represents a single transponder of a satellite. */
+ struct Transponder
+ {
+ 
+ public:
++  /** Possible transponder types. */
+   enum class Type {
+-    Transponder,
+-    Transmitter
++    Transponder,  ///< Proper transponder (repeater).
++    Transmitter   ///< Just a transmitter (beacon).
+   };
+ 
++  /** Possible transponder modes. */
+   enum class Mode {
+-    FM, CW, APRS, BPSK
++    FM,   ///< Plain FM.
++    CW,   ///< Simple CW.
++    APRS, ///< AFSK APRS.
++    BPSK  ///< BPSK.
+   };
+ 
+ public:
++  /** Default constructor. */
+   Transponder();
+ 
++  /** Returns @c true, if the transponder is valid.
++   * I.e., it is associated with a satellite. */
+   bool isValid() const;
+ 
++  /** Returns the NORAD id of the associated satellite. */
+   unsigned int satellite() const;
++  /** Returns the transponder type. */
+   Type type() const;
++  /** Returns the transponder mode. */
+   Mode mode() const;
+ 
++  /** Returns a descriptive name of the transponder. */
+   const QString &name() const;
+ 
++  /** Returns the uplink frequency, if there is one.
++   * An upload frequency is usually missing, if the type is @c Type::Transmitter. */
+   const Frequency &uplink() const;
++  /** Retruns the downlink frequency. */
+   const Frequency &downlink() const;
+ 
+ public:
++  /** Parses a transponder from the given SatNOGS JSON object. */
+   static Transponder fromSATNOGS(const QJsonObject &obj);
+ 
+ protected:
++  /** Holds the NORAD id of the satellite. */
+   unsigned int _satellite;
++  /** Holds the transponder type. */
+   Type _type;
++  /** Holds the transponder mode. */
+   Mode _mode;
++  /** Holds the name. */
+   QString _name;
++  /** Holds the downlink frequency. */
+   Frequency _downlink;
++  /** Holds the uplink frequency. */
+   Frequency _uplink;
+ };
+ 
+ 
+ 
++/** Implements the database of all known transponder.
++ * @ingroup sat */
+ class TransponderDatabase : public QAbstractTableModel
+ {
+   Q_OBJECT
+ 
+ public:
++  /** Just a const iterator over all transponder. */
+   typedef QVector<Transponder>::const_iterator const_iterator;
+ 
+ public:
++  /** Constructor.
++   * @param autoLoad If @c true, the transponder information gets downloaded and loaded
++   *        automatically.
++   * @param updatePeriod Specifies the maximum age of the cache in days.
++   * @param parent The QObject parent. */
+   explicit TransponderDatabase(bool autoLoad, unsigned int updatePeriod = 7, QObject *parent = nullptr);
+ 
++  /** The current age of the cache. */
+   unsigned int dbAge() const;
+ 
++  /** Returns the i-th transponder. */
+   const Transponder &getAt(unsigned int idx) const;
+ 
++  /** Implements the QAbstractTableModel interface.
++   * Returns the number of rows in the table. That is, the number of transponder. */
+   int rowCount(const QModelIndex &parent) const;
++  /** Implements the QAbstractTableModel interface. Returns the number of columns in the table. */
+   int columnCount(const QModelIndex &parent) const;
++  /** Implements the QAbstractTableModel interface. Returns the data for the cell. */
+   QVariant data(const QModelIndex &index, int role) const;
+ 
++  /** Returns an iterator, pointing at the first transponder. */
+   const_iterator begin() const;
++  /** Returns an iterator, pointing right after the last transponder. */
+   const_iterator end() const;
+ 
+ public slots:
++  /** Downloads and loads all transponder information. */
+   void load();
+ 
+ signals:
+@@ -88,6 +127,7 @@ private slots:
+   void downloadFinished(QNetworkReply *reply);
+ 
+ protected:
++  /** Loads the transponder information from the given file. */
+   bool load(const QString &filename);
+ 
+ private:
+diff --git a/lib/tyt_codeplug.hh b/lib/tyt_codeplug.hh
+index cf4b460..1d76551 100644
+--- a/lib/tyt_codeplug.hh
++++ b/lib/tyt_codeplug.hh
+@@ -1185,6 +1185,7 @@ public:
+   public:
+     /** Some Limits. */
+     struct Limit {
++      /** The maximum number of messages in a bank. */
+       static constexpr unsigned int messages() { return 50; }
+     };
+   };
+-- 
+2.49.0
+

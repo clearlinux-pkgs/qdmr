@@ -1,0 +1,3109 @@
+From aba823317a3a4ac04b1da336bc7a1d6c1b08c050 Mon Sep 17 00:00:00 2001
+From: Hannes Matuschek <hmatuschek@gmail.com>
+Date: Wed, 22 Jan 2025 21:03:35 +0100
+Subject: [PATCH] Added support for satellite tracking function (#548)
+
+* Implemented satellite database and editor.
+* Implemented satellite configuration for AnyTone devices. Addresses #497.
+* Implemented sat config for opengd77.
+---
+ lib/CMakeLists.txt                  |  16 +-
+ lib/anytone_codeplug.hh             |   4 +-
+ lib/anytone_radio.cc                |  79 +++++++-
+ lib/anytone_radio.hh                |  11 ++
+ lib/anytone_satelliteconfig.cc      | 226 +++++++++++++++++++++
+ lib/anytone_satelliteconfig.hh      | 131 +++++++++++++
+ lib/codeplug.hh                     |   4 +-
+ lib/d578uv_limits.cc                |   5 +
+ lib/d868uv_limits.cc                |   5 +
+ lib/d878uv.cc                       |   1 +
+ lib/d878uv2.cc                      |   1 +
+ lib/d878uv2_limits.cc               |   5 +
+ lib/d878uv_limits.cc                |   7 +-
+ lib/dm1701_limits.cc                |   5 +
+ lib/dmr6x2uv_limits.cc              |   5 +
+ lib/dr1801uv.cc                     |  11 ++
+ lib/dr1801uv.hh                     |   1 +
+ lib/dr1801uv_limits.cc              |   5 +
+ lib/gd73.cc                         |  15 +-
+ lib/gd73.hh                         |   2 +
+ lib/gd73_limits.cc                  |   5 +
+ lib/gd77_limits.cc                  |   5 +
+ lib/md2017_limits.cc                |   5 +
+ lib/md390_limits.cc                 |   5 +
+ lib/opengd77.cc                     |   2 +-
+ lib/opengd77_limits.cc              |   7 +
+ lib/opengd77_satelliteconfig.cc     |  20 ++
+ lib/opengd77_satelliteconfig.hh     |  36 ++++
+ lib/opengd77base.cc                 |  95 ++++++++-
+ lib/opengd77base.hh                 |   7 +
+ lib/opengd77base_codeplug.cc        | 266 -------------------------
+ lib/opengd77base_codeplug.hh        | 156 ---------------
+ lib/opengd77base_satelliteconfig.cc | 292 ++++++++++++++++++++++++++++
+ lib/opengd77base_satelliteconfig.hh | 191 ++++++++++++++++++
+ lib/openuv380.cc                    |   3 +-
+ lib/openuv380_satelliteconfig.cc    |  21 ++
+ lib/openuv380_satelliteconfig.hh    |  36 ++++
+ lib/radio.hh                        |  17 +-
+ lib/radioddity_radio.cc             |  11 ++
+ lib/radioddity_radio.hh             |   2 +
+ lib/radiolimits.cc                  |  26 ++-
+ lib/radiolimits.hh                  |  13 ++
+ lib/rd5r_limits.cc                  |   5 +
+ lib/satelliteconfig.cc              |   8 +
+ lib/satelliteconfig.hh              |  27 +++
+ lib/satellitedatabase.cc            |  40 +++-
+ lib/satellitedatabase.hh            |   9 +-
+ lib/tyt_radio.cc                    |   8 +
+ lib/tyt_radio.hh                    |   2 +
+ lib/uv390_limits.cc                 |   5 +
+ src/analogchanneldialog.ui          |  16 +-
+ src/application.cc                  |  43 ++++
+ src/mainwindow.cc                   |   3 +
+ src/mainwindow.ui                   |   8 +-
+ src/satellitedatabasedialog.cc      |  29 ++-
+ src/satelliteselectiondialog.cc     |   2 +
+ src/searchpopup.cc                  |   8 +-
+ src/selectivecallbox.cc             |  59 +++++-
+ src/selectivecallbox.hh             |  15 ++
+ 59 files changed, 1571 insertions(+), 476 deletions(-)
+ create mode 100644 lib/anytone_satelliteconfig.cc
+ create mode 100644 lib/anytone_satelliteconfig.hh
+ create mode 100644 lib/opengd77_satelliteconfig.cc
+ create mode 100644 lib/opengd77_satelliteconfig.hh
+ create mode 100644 lib/opengd77base_satelliteconfig.cc
+ create mode 100644 lib/opengd77base_satelliteconfig.hh
+ create mode 100644 lib/openuv380_satelliteconfig.cc
+ create mode 100644 lib/openuv380_satelliteconfig.hh
+ create mode 100644 lib/satelliteconfig.cc
+ create mode 100644 lib/satelliteconfig.hh
+
+diff --git a/lib/CMakeLists.txt b/lib/CMakeLists.txt
+index 95ff2c1..c179aee 100644
+--- a/lib/CMakeLists.txt
++++ b/lib/CMakeLists.txt
+@@ -21,6 +21,7 @@ SET(libdmrconf_SOURCES
+     channel.cc zone.cc scanlist.cc gpssystem.cc codeplug.cc roamingzone.cc roamingchannel.cc
+     callsigndb.cc talkgroupdatabase.cc radioid.cc encryptionextension.cc commercial_extension.cc
+     smsextension.cc satellitedatabase.cc orbitalelementsdatabase.cc transponderdatabase.cc
++    satelliteconfig.cc
+     tyt_radio.cc tyt_interface.cc tyt_codeplug.cc tyt_callsigndb.cc tyt_extensions.cc
+     md2017.cc md2017_codeplug.cc md2017_callsigndb.cc md2017_filereader.cc md2017_limits.cc
+     md390.cc md390_codeplug.cc md390_filereader.cc md390_limits.cc
+@@ -30,12 +31,13 @@ SET(libdmrconf_SOURCES
+     rd5r.cc rd5r_codeplug.cc rd5r_filereader.cc rd5r_limits.cc
+     gd77.cc gd77_codeplug.cc gd77_callsigndb.cc gd77_filereader.cc gd77_limits.cc
+     opengd77_interface.cc opengd77base.cc opengd77base_codeplug.cc opengd77base_callsigndb.cc
+-    opengd77_extension.cc opengd77_limits.cc
+-    opengd77.cc opengd77_codeplug.cc opengd77_callsigndb.cc
+-    openuv380.cc openuv380_codeplug.cc openuv380_callsigndb.cc
++    opengd77base_satelliteconfig.cc opengd77_extension.cc opengd77_limits.cc
++    opengd77.cc opengd77_codeplug.cc opengd77_callsigndb.cc opengd77_satelliteconfig.cc
++    openuv380.cc openuv380_codeplug.cc openuv380_callsigndb.cc openuv380_satelliteconfig.cc
+     openrtx.cc openrtx_interface.cc openrtx_codeplug.cc
+     c7000device.cc gd73.cc gd73_interface.cc gd73_codeplug.cc gd73_filereader.cc gd73_limits.cc
+     anytone_interface.cc anytone_radio.cc anytone_codeplug.cc anytone_extension.cc anytone_limits.cc
++    anytone_satelliteconfig.cc
+     d868uv.cc d868uv_codeplug.cc d868uv_callsigndb.cc d868uv_limits.cc
+     d878uv.cc d878uv_codeplug.cc d878uv_limits.cc
+     d578uv.cc d578uv_codeplug.cc d578uv_limits.cc
+@@ -52,6 +54,7 @@ SET(libdmrconf_MOC_HEADERS
+     channel.hh zone.hh scanlist.hh gpssystem.hh codeplug.hh roamingzone.hh roamingchannel.hh
+     callsigndb.hh talkgroupdatabase.hh radioid.hh encryptionextension.hh commercial_extension.hh
+     smsextension.hh satellitedatabase.hh orbitalelementsdatabase.hh transponderdatabase.hh
++    satelliteconfig.hh
+     tyt_radio.hh tyt_interface.hh tyt_codeplug.hh tyt_callsigndb.hh tyt_extensions.hh
+     md2017.hh md2017_codeplug.hh md2017_callsigndb.hh md2017_limits.hh
+     md390.hh md390_codeplug.hh md390_limits.hh
+@@ -61,12 +64,13 @@ SET(libdmrconf_MOC_HEADERS
+     rd5r.hh rd5r_codeplug.hh rd5r_limits.hh
+     gd77.hh gd77_codeplug.hh gd77_callsigndb.hh gd77_limits.hh
+     opengd77_interface.hh opengd77base.hh opengd77base_codeplug.hh opengd77base_callsigndb.hh
+-    opengd77_extension.hh opengd77_limits.hh
+-    opengd77.hh opengd77_codeplug.hh opengd77_callsigndb.hh
+-    openuv380.hh openuv380_codeplug.hh openuv380_callsigndb.hh
++    opengd77base_satelliteconfig.hh opengd77_extension.hh opengd77_limits.hh
++    opengd77.hh opengd77_codeplug.hh opengd77_callsigndb.hh opengd77_satelliteconfig.hh
++    openuv380.hh openuv380_codeplug.hh openuv380_callsigndb.hh openuv380_satelliteconfig.hh
+     c7000device.hh gd73.hh gd73_interface.hh gd73_codeplug.hh gd73_limits.hh
+     openrtx.hh openrtx_interface.hh openrtx_codeplug.hh
+     anytone_interface.hh anytone_radio.hh anytone_codeplug.hh anytone_extension.hh anytone_limits.hh
++    anytone_satelliteconfig.hh
+     d868uv.hh d868uv_codeplug.hh d868uv_callsigndb.hh d868uv_limits.hh
+     d878uv.hh d878uv_codeplug.hh d878uv_limits.hh
+     d578uv.hh d578uv_codeplug.hh d578uv_limits.hh
+diff --git a/lib/anytone_codeplug.hh b/lib/anytone_codeplug.hh
+index cc3626e..8aa8d65 100644
+--- a/lib/anytone_codeplug.hh
++++ b/lib/anytone_codeplug.hh
+@@ -20,7 +20,7 @@ class AnytoneCodeplug : public Codeplug
+ {
+   Q_OBJECT
+ 
+-protected:
++public:
+   /** Implements encoding of CTCSS tones. */
+   struct CTCSS {
+   public:
+@@ -34,8 +34,6 @@ protected:
+     static SelectiveCall _codeTable[52];
+   };
+ 
+-
+-public:
+   /** Represents the base class for bitmaps in all AnyTone codeplugs. */
+   class BitmapElement: public Element
+   {
+diff --git a/lib/anytone_radio.cc b/lib/anytone_radio.cc
+index e437817..f707f47 100644
+--- a/lib/anytone_radio.cc
++++ b/lib/anytone_radio.cc
+@@ -11,7 +11,7 @@
+ 
+ AnytoneRadio::AnytoneRadio(const QString &name, AnytoneInterface *device, QObject *parent)
+   : Radio(parent), _name(name), _dev(device), _codeplugFlags(), _config(nullptr),
+-    _codeplug(nullptr), _callsigns(nullptr)
++    _codeplug(nullptr), _callsigns(nullptr), _satellites(nullptr)
+ {
+   // Check if device is open
+   if ((nullptr==_dev) || (! _dev->isOpen())) {
+@@ -100,11 +100,9 @@ AnytoneRadio::startUpload(Config *config, bool blocking, const Codeplug::Flags &
+   return true;
+ }
+ 
++
+ bool
+ AnytoneRadio::startUploadCallsignDB(UserDatabase *db, bool blocking, const CallsignDB::Selection &selection, const ErrorStack &err) {
+-  Q_UNUSED(db);
+-  Q_UNUSED(blocking);
+-
+   _callsigns->encode(db, selection);
+ 
+   _task = StatusUploadCallsigns;
+@@ -123,6 +121,31 @@ AnytoneRadio::startUploadCallsignDB(UserDatabase *db, bool blocking, const Calls
+   return true;
+ }
+ 
++
++bool
++AnytoneRadio::startUploadSatelliteConfig(SatelliteDatabase *db, bool blocking, const ErrorStack &err) {
++  if (! _satellites->encode(db, err)) {
++    errMsg(err) << "Cannot encode satellite config for AnyTone device.";
++    return false;
++  }
++
++  _task = StatusUploadSatellites;
++  _errorStack = err;
++
++  if (blocking) {
++    run();
++    return (StatusIdle == _task);
++  }
++
++  // If non-blocking -> move device to this thread
++  if (_dev && _dev->isOpen())
++    _dev->moveToThread(this);
++  start();
++
++  return true;
++}
++
++
+ void
+ AnytoneRadio::run() {
+   if (StatusDownload == _task) {
+@@ -184,6 +207,27 @@ AnytoneRadio::run() {
+       return;
+     }
+ 
++    _dev->reboot();
++    _dev->close();
++    _task = StatusIdle;
++    emit uploadComplete(this);
++  } else if (StatusUploadSatellites == _task) {
++    if ((nullptr==_dev) || (! _dev->isOpen())) {
++      _task = StatusError;
++      emit uploadError(this);
++      return;
++    }
++
++    emit uploadStarted();
++
++    if (! uploadSatellites()) {
++      _dev->reboot();
++      _dev->close();
++      _task = StatusError;
++      emit uploadError(this);
++      return;
++    }
++
+     _dev->reboot();
+     _dev->close();
+     _task = StatusIdle;
+@@ -323,3 +367,30 @@ AnytoneRadio::uploadCallsigns() {
+ 
+   return true;
+ }
++
++
++bool
++AnytoneRadio::uploadSatellites() {
++  // Sort all elements before uploading
++  _satellites->image(0).sort();
++
++  size_t totalBlocks = _satellites->memSize()/WBSIZE;
++  size_t blkWritten  = 0;
++  // Upload all elements back to the device
++  for (int n=0; n<_satellites->image(0).numElements(); n++) {
++    unsigned addr = _satellites->image(0).element(n).address();
++    unsigned size = _satellites->image(0).element(n).data().size();
++    unsigned nblks = size/WBSIZE;
++    for (unsigned i=0; i<nblks; i++) {
++      if (! _dev->write(0, addr+i*WBSIZE, _satellites->data(addr)+i*WBSIZE, WBSIZE, _errorStack)) {
++        errMsg(_errorStack) << "Cannot write satellite config.";
++        _task = StatusError;
++        return false;
++      }
++      blkWritten++;
++      emit uploadProgress(float(blkWritten*100)/totalBlocks);
++    }
++  }
++
++  return true;
++}
+diff --git a/lib/anytone_radio.hh b/lib/anytone_radio.hh
+index 7ff2b11..61d9e32 100644
+--- a/lib/anytone_radio.hh
++++ b/lib/anytone_radio.hh
+@@ -13,6 +13,7 @@
+ #include "radio.hh"
+ #include "anytone_interface.hh"
+ #include "anytone_codeplug.hh"
++#include "anytone_satelliteconfig.hh"
+ 
+ /** Implements an interface to Anytone radios.
+  *
+@@ -49,14 +50,19 @@ public:
+ public slots:
+   /** Starts the download of the codeplug and derives the generic configuration from it. */
+   bool startDownload(bool blocking=false, const ErrorStack &err=ErrorStack());
++
+   /** Derives the device-specific codeplug from the generic configuration and uploads that
+    * codeplug to the radio. */
+   bool startUpload(Config *config, bool blocking=false,
+                    const Codeplug::Flags &flags = Codeplug::Flags(), const ErrorStack &err=ErrorStack());
++
+   /** Encodes the given user-database and uploades it to the device. */
+   bool startUploadCallsignDB(UserDatabase *db, bool blocking=false,
+                              const CallsignDB::Selection &selection=CallsignDB::Selection(), const ErrorStack &err=ErrorStack());
+ 
++  bool startUploadSatelliteConfig(
++      SatelliteDatabase *db, bool blocking=false, const ErrorStack &err=ErrorStack());
++
+ protected:
+   /** Thread main routine, performs all blocking IO operations for codeplug up- and download. */
+   void run();
+@@ -69,6 +75,9 @@ private:
+   /** Uploads the encoded callsign database to the radio.
+    * This method block until the upload is complete. */
+   virtual bool uploadCallsigns();
++  /** Uploads the encoded satellite config to the radio.
++   * This method block until the upload is complete. */
++  virtual bool uploadSatellites();
+ 
+ protected:
+   /** The device identifier. */
+@@ -86,6 +95,8 @@ protected:
+   AnytoneCodeplug *_codeplug;
+   /** The actual binary callsign database representation. */
+   CallsignDB *_callsigns;
++  /** The actual binary callsign database representation. */
++  AnytoneSatelliteConfig *_satellites;
+ };
+ 
+ #endif // __D868UV_HH__
+diff --git a/lib/anytone_satelliteconfig.cc b/lib/anytone_satelliteconfig.cc
+new file mode 100644
+index 0000000..58351d3
+--- /dev/null
++++ b/lib/anytone_satelliteconfig.cc
+@@ -0,0 +1,226 @@
++#include "anytone_satelliteconfig.hh"
++#include "anytone_codeplug.hh"
++#include "satellitedatabase.hh"
++#include "logger.hh"
++
++
++/* ********************************************************************************************* *
++ * Implementation of AnytoneSatelliteConfig::Satellite
++ * ********************************************************************************************* */
++AnytoneSatelliteConfig::SatelliteElement::SatelliteElement(uint8_t *ptr, size_t size)
++  : Element(ptr, size)
++{
++  // pass...
++}
++
++AnytoneSatelliteConfig::SatelliteElement::SatelliteElement(uint8_t *ptr)
++  : Element(ptr, size())
++{
++  // pass...
++}
++
++void
++AnytoneSatelliteConfig::SatelliteElement::clear() {
++  memset(_data, 0, size());
++  memset(_data, 0x20, 0x50);
++}
++
++void
++AnytoneSatelliteConfig::SatelliteElement::setName(const QString &name) {
++  writeASCII(Offset::name(), name, Limit::name(), 0);
++}
++
++void
++AnytoneSatelliteConfig::SatelliteElement::setEpoch(const OrbitalElement::Epoch &epoch) {
++  double tmp = epoch.toEpoch();
++  int year = epoch.year;
++  int day  = tmp; tmp -= day; tmp *= 100000000;
++  int fday = tmp;
++
++  QString fmt_year = QString("%1").arg(year%100, 2, 10, QChar('0'));
++  QString fmt_day = QString("%1.%2")
++      .arg(day, 3, 10, QChar('0'))
++      .arg(fday, 8, 10, QChar('0'));
++
++  writeASCII(Offset::epochYear(), fmt_year, 2);
++  writeASCII(Offset::epochDay(), fmt_day, 12, 0x20);
++}
++
++void
++AnytoneSatelliteConfig::SatelliteElement::setMeanMotionDerivative(double dmm) {
++  QString fmt = QString("%1.%2")
++      .arg(dmm < 0 ? '-' :  ' ')
++      .arg((int)(std::abs(dmm) * 100000000), 8, 10, QChar('0'));
++  writeASCII(Offset::meanMotionDerivative(), fmt, 10, 0x20);
++}
++
++void
++AnytoneSatelliteConfig::SatelliteElement::setInclination(double incl) {
++  int ddd = incl; incl -= ddd;
++  int ffff = incl*10000;
++
++  QString fmt = QString("%1.%2")
++      .arg(ddd, 3, 10, QChar(' '))
++      .arg(ffff, 4, 10, QChar('0'));
++
++  writeASCII(Offset::inclination(), fmt, 8, 0x20);
++}
++
++void
++AnytoneSatelliteConfig::SatelliteElement::setAscension(double asc) {
++  int ddd = asc; asc -= ddd;
++  int ffff = asc*10000;
++
++  QString fmt = QString("%1.%2")
++      .arg(ddd, 3, 10, QChar(' '))
++      .arg(ffff, 4, 10, QChar('0'));
++
++  writeASCII(Offset::ascension(), fmt, 8, 0x20);
++}
++
++void
++AnytoneSatelliteConfig::SatelliteElement::setEccentricity(double ecc) {
++  QString fmt = QString("%1").arg((int)(ecc * 10000000), 7, 10, QChar('0'));
++  writeASCII(Offset::eccentricity(), fmt, 7, 0x20);
++}
++
++void
++AnytoneSatelliteConfig::SatelliteElement::setPerigee(double peri) {
++  int ddd = peri; peri -= ddd;
++  int ffff = peri*10000;
++
++  QString fmt = QString("%1.%2")
++      .arg(ddd, 3, 10, QChar(' '))
++      .arg(ffff, 4, 10, QChar('0'));
++
++  writeASCII(Offset::perigee(), fmt, 8, 0x20);
++}
++
++void
++AnytoneSatelliteConfig::SatelliteElement::setAnomaly(double ma) {
++  int ddd = ma; ma -= ddd;
++  int ffff = ma*10000;
++
++  QString fmt = QString("%1.%2")
++      .arg(ddd, 3, 10, QChar(' '))
++      .arg(ffff, 4, 10, QChar('0'));
++
++  writeASCII(Offset::anomaly(), fmt, 8, 0x20);
++}
++
++void
++AnytoneSatelliteConfig::SatelliteElement::setMeanMotion(double mm) {
++  int dd = mm; mm -= dd;
++  int ffffffff = mm*100000000;
++
++  QString fmt = QString("%1.%2")
++      .arg(dd, 2, 10, QChar(' '))
++      .arg(ffffffff, 8, 10, QChar('0'));
++
++  writeASCII(Offset::meanMotion(), fmt, 11, 0x20);
++}
++
++void
++AnytoneSatelliteConfig::SatelliteElement::setRevolution(unsigned int num) {
++  writeASCII(Offset::revolution(), QString("%1").arg(num, 5, 10, QChar('0')), 5, 0x20);
++}
++
++
++void
++AnytoneSatelliteConfig::SatelliteElement::setDownlink(const Frequency &f) {
++  setUInt32_le(Offset::downlinkFrequency(), f.inHz()/10);
++}
++
++void
++AnytoneSatelliteConfig::SatelliteElement::setDownlinkTone(const SelectiveCall &tone) {
++  if (tone.isInvalid()) {
++    setUInt8(Offset::downlinkToneType(), (int)ToneType::None);
++  } else if (tone.isCTCSS()) {
++    setUInt8(Offset::downlinkToneType(), (int)ToneType::CTCSS);
++    setUInt8(Offset::downlinkCTCSS(), AnytoneCodeplug::CTCSS::encode(tone));
++  } else if (tone.isDCS()) {
++    uint16_t val = tone.binCode();
++    if (tone.isInverted()) val |= (1<<9);
++    setUInt8(Offset::downlinkToneType(), (int)ToneType::DCS);
++    setUInt16_le(Offset::downlinkDCS(), val);
++  }
++}
++
++void
++AnytoneSatelliteConfig::SatelliteElement::setUplink(const Frequency &f) {
++  setUInt32_le(Offset::uplinkFrequency(), f.inHz()/10);
++}
++
++void
++AnytoneSatelliteConfig::SatelliteElement::setUplinkTone(const SelectiveCall &tone) {
++  if (tone.isInvalid()) {
++    setUInt8(Offset::uplinkToneType(), (int)ToneType::None);
++  } else if (tone.isCTCSS()) {
++    setUInt8(Offset::uplinkToneType(), (int)ToneType::CTCSS);
++    setUInt8(Offset::uplinkCTCSS(), AnytoneCodeplug::CTCSS::encode(tone));
++  } else if (tone.isDCS()) {
++    uint16_t val = tone.binCode();
++    if (tone.isInverted()) val |= (1<<9);
++    setUInt8(Offset::uplinkToneType(), (int)ToneType::DCS);
++    setUInt16_le(Offset::uplinkDCS(), val);
++  }
++}
++
++
++bool
++AnytoneSatelliteConfig::SatelliteElement::encode(const Satellite &sat, const ErrorStack &err) {
++  Q_UNUSED(err)
++
++  setName(sat.name());
++  setEpoch(sat.epoch());
++  setMeanMotionDerivative(sat.meanMotionDerivative());
++  setInclination(sat.inclination());
++  setAscension(sat.ascension());
++  setEccentricity(sat.eccentricity());
++  setPerigee(sat.perigee());
++  setAnomaly(sat.meanAnomaly());
++  setMeanMotion(sat.meanMotion());
++  setRevolution(sat.revolutionNumber());
++
++  setDownlink(sat.fmDownlink());
++  setDownlinkTone(sat.fmDownlinkTone());
++  setUplink(sat.fmUplink());
++  setUplinkTone(sat.fmUplinkTone());
++
++  return true;
++}
++
++
++
++/* ********************************************************************************************* *
++ * Implementation of AnytoneSatelliteConfig
++ * ********************************************************************************************* */
++AnytoneSatelliteConfig::AnytoneSatelliteConfig(QObject *parent)
++  : SatelliteConfig{parent}
++{
++  addImage("AnyTone Satellite Configuration");
++}
++
++
++AnytoneSatelliteConfig::SatelliteElement
++AnytoneSatelliteConfig::satellite(unsigned int idx) {
++  return SatelliteElement(data(Offset::satellites() + idx*Offset::betweenSatellites()));
++}
++
++
++bool
++AnytoneSatelliteConfig::encode(SatelliteDatabase *db, const ErrorStack &err) {
++  unsigned int numSat = std::min(Limit::satellites(), db->count());
++  image(0).addElement(Offset::satellites(), numSat*SatelliteElement::size());
++
++  for (unsigned int i=0; i<numSat; i++) {
++    logDebug() << "Encode sat '" << db->getAt(i).name() << "' at index " << i << ".";
++    if (! satellite(i).encode(db->getAt(i), err)) {
++      errMsg(err) << "Cannot encode satellite '" << db->getAt(i).name()
++                  << "at index " << i << ".";
++      return false;
++    }
++  }
++
++  return true;
++}
+diff --git a/lib/anytone_satelliteconfig.hh b/lib/anytone_satelliteconfig.hh
+new file mode 100644
+index 0000000..ef9a409
+--- /dev/null
++++ b/lib/anytone_satelliteconfig.hh
+@@ -0,0 +1,131 @@
++#ifndef ANYTONE_SATELLITECONFIG_HH
++#define ANYTONE_SATELLITECONFIG_HH
++
++#include "satelliteconfig.hh"
++#include "frequency.hh"
++#include "signaling.hh"
++#include "codeplug.hh"
++#include "orbitalelementsdatabase.hh"
++
++// Forward declarations
++class Satellite;
++
++/** Implementation of satellite confifuration for all AnyTone devices.
++ * @ingroup anytone */
++class AnytoneSatelliteConfig : public SatelliteConfig
++{
++  Q_OBJECT
++
++public:
++  class SatelliteElement: Codeplug::Element
++  {
++  protected:
++    /** Internal encoding of sub tone type. */
++    enum class ToneType {
++      None = 0, CTCSS = 1, DCS = 2
++    };
++
++  protected:
++    /** Hidden constructor. */
++    SatelliteElement(uint8_t *ptr, size_t size);
++
++  public:
++    /** Constructor. */
++    explicit SatelliteElement(uint8_t *ptr);
++
++    static constexpr unsigned int size() { return 0x200; }
++
++    void clear();
++
++    /** Sets the satellite name. */
++    void setName(const QString &name);
++
++    /** Sets the epoch of the orbital element. */
++    void setEpoch(const OrbitalElement::Epoch &epoch);
++    /** Sets the derivative of the mean motion. */
++    void setMeanMotionDerivative(double dmm);
++    /** Sets the inclination. */
++    void setInclination(double incl);
++    /** Sets the right ascension of the ascending node. */
++    void setAscension(double asc);
++    /** Sets the eccentricity */
++    void setEccentricity(double ecc);
++    /** Sets the argument of perigee. */
++    void setPerigee(double peri);
++    /** Sets the mean anomaly. */
++    void setAnomaly(double ma);
++    /** Sets the mean motion. */
++    void setMeanMotion(double mm);
++    /** Sets the revolution number. */
++    void setRevolution(unsigned int num);
++
++    /** Sets the downlink frequency. */
++    void setDownlink(const Frequency &f);
++    /** Sets the downlink sub tone. */
++    void setDownlinkTone(const SelectiveCall &tone);
++    /** Sets the uplink frequency. */
++    void setUplink(const Frequency &f);
++    /** Sets the uplink sub tone. */
++    void setUplinkTone(const SelectiveCall &tone);
++
++    /** Encodes the given satellite. */
++    bool encode(const Satellite &sat, const ErrorStack &err=ErrorStack());
++
++  public:
++    /** Some limits for the satellite. */
++    struct Limit: Element::Limit {
++      /** Maximum size of satellite name. */
++      static constexpr unsigned int name() { return 8; }
++    };
++
++  protected:
++    /** Some internal offsets. */
++    struct Offset: Element::Offset {
++      /// @cond DO_NOT_DOCUMENT
++      static constexpr unsigned int name() { return 0x0000; }
++      static constexpr unsigned int epochYear() { return 0x0008; }
++      static constexpr unsigned int epochDay() { return 0x000a; }
++      static constexpr unsigned int meanMotionDerivative() { return 0x0017; }
++      static constexpr unsigned int inclination() { return 0x0021; }
++      static constexpr unsigned int ascension() { return 0x002a; }
++      static constexpr unsigned int eccentricity() { return 0x0033; }
++      static constexpr unsigned int perigee() { return 0x003b; }
++      static constexpr unsigned int anomaly() { return 0x0044; }
++      static constexpr unsigned int meanMotion() { return 0x004d; }
++      static constexpr unsigned int revolution() { return 0x0058; }
++      static constexpr unsigned int downlinkFrequency() { return 0x0060; }
++      static constexpr unsigned int uplinkFrequency() { return 0x0064; }
++      static constexpr unsigned int uplinkToneType() { return 0x0068; }
++      static constexpr unsigned int downlinkToneType() { return 0x0069; }
++      static constexpr unsigned int uplinkCTCSS() { return 0x006a; }
++      static constexpr unsigned int downlinkCTCSS() { return 0x006b; }
++      static constexpr unsigned int uplinkDCS() { return 0x006c; }
++      static constexpr unsigned int downlinkDCS() { return 0x006e; }
++      /// @endcond
++    };
++  };
++
++public:
++  /** Default constructor. */
++  explicit AnytoneSatelliteConfig(QObject *parent = nullptr);
++
++  SatelliteElement satellite(unsigned int idx);
++  bool encode(SatelliteDatabase *db, const ErrorStack &err=ErrorStack());
++
++public:
++  /** Some limits for the satellite config. */
++  struct Limit {
++    static constexpr unsigned int satellites() { return 200; }
++  };
++
++protected:
++  /** Some internal offsets. */
++  struct Offset {
++    /// @cond DO_NOT_DOCUMENT
++    static constexpr unsigned int satellites() { return 0x2ec0000; }
++    static constexpr unsigned int betweenSatellites() { return SatelliteElement::size(); }
++    /// @endcond
++  };
++};
++
++#endif // ANYTONE_SATELLITECONFIG_HH
+diff --git a/lib/codeplug.hh b/lib/codeplug.hh
+index 2f61251..acf931d 100644
+--- a/lib/codeplug.hh
++++ b/lib/codeplug.hh
+@@ -63,13 +63,13 @@ public:
+         /** Implements a simple increment. */
+         inline Bit operator+ (unsigned int bits) const {
+           unsigned int tmp = 8 * byte + (7-bit) + bits;
+-          return {tmp/8, (7 - bit % 8)};
++          return {tmp/8, (7 - (tmp % 8))};
+         }
+ 
+         /** Implements a simple increment. */
+         inline Bit operator- (unsigned int bits) const {
+           unsigned int tmp = 8 * byte + (7-bit) - bits;
+-          return {tmp/8, (7 - bit % 8)};
++          return {tmp/8, (7 - (tmp % 8))};
+         }
+       };
+     };
+diff --git a/lib/d578uv_limits.cc b/lib/d578uv_limits.cc
+index fc2af0a..45774fd 100644
+--- a/lib/d578uv_limits.cc
++++ b/lib/d578uv_limits.cc
+@@ -19,6 +19,11 @@ D578UVLimits::D578UVLimits(const std::initializer_list<std::pair<Frequency, Freq
+   _callSignDBImplemented  = true;
+   _numCallSignDBEntries   = 500000;
+ 
++  // Define limits for satellite config
++  _hasSatelliteConfig          = false;
++  _satelliteConfigImplemented  = false;
++  _numSatellites               = 0;
++
+   /* Define limits for the general settings. */
+   add("settings",
+       new RadioLimitItem{
+diff --git a/lib/d868uv_limits.cc b/lib/d868uv_limits.cc
+index 65bdc86..fc27b2c 100644
+--- a/lib/d868uv_limits.cc
++++ b/lib/d868uv_limits.cc
+@@ -19,6 +19,11 @@ D868UVLimits::D868UVLimits(const std::initializer_list<std::pair<Frequency, Freq
+   _callSignDBImplemented  = true;
+   _numCallSignDBEntries   = 200000;
+ 
++  // Define limits for satellite config
++  _hasSatelliteConfig          = false;
++  _satelliteConfigImplemented  = false;
++  _numSatellites               = 0;
++
+   /* Define limits for the general settings. */
+   add("settings",
+       new RadioLimitItem{
+diff --git a/lib/d878uv.cc b/lib/d878uv.cc
+index 29c8968..87f714a 100644
+--- a/lib/d878uv.cc
++++ b/lib/d878uv.cc
+@@ -18,6 +18,7 @@ D878UV::D878UV(AnytoneInterface *device, QObject *parent)
+   _codeplug = new D878UVCodeplug(this);
+   _codeplug->clear();
+   _callsigns = new D868UVCallsignDB(this);
++  _satellites = new AnytoneSatelliteConfig(this);
+ 
+   // Get device info and determine supported TX frequency bands
+   AnytoneInterface::RadioVariant info;
+diff --git a/lib/d878uv2.cc b/lib/d878uv2.cc
+index 7b6328e..ecd519a 100644
+--- a/lib/d878uv2.cc
++++ b/lib/d878uv2.cc
+@@ -17,6 +17,7 @@ D878UV2::D878UV2(AnytoneInterface *device, QObject *parent)
+   _codeplug = new D878UV2Codeplug(this);
+   _codeplug->clear();
+   _callsigns = new D878UV2CallsignDB(this);
++  _satellites = new AnytoneSatelliteConfig(this);
+ 
+   // Get device info and determine supported TX frequency bands
+   AnytoneInterface::RadioVariant info;
+diff --git a/lib/d878uv2_limits.cc b/lib/d878uv2_limits.cc
+index 610287c..a63fc9f 100644
+--- a/lib/d878uv2_limits.cc
++++ b/lib/d878uv2_limits.cc
+@@ -19,6 +19,11 @@ D878UV2Limits::D878UV2Limits(const std::initializer_list<std::pair<Frequency, Fr
+   _callSignDBImplemented  = true;
+   _numCallSignDBEntries   = 500000;
+ 
++  // Define limits for satellite config
++  _hasSatelliteConfig          = true;
++  _satelliteConfigImplemented  = true;
++  _numSatellites               = 200;
++
+   /* Define limits for the general settings. */
+   add("settings",
+       new RadioLimitItem{
+diff --git a/lib/d878uv_limits.cc b/lib/d878uv_limits.cc
+index aaa5947..599780d 100644
+--- a/lib/d878uv_limits.cc
++++ b/lib/d878uv_limits.cc
+@@ -7,7 +7,7 @@
+ #include "scanlist.hh"
+ #include "gpssystem.hh"
+ #include "roamingzone.hh"
+-
++#include "anytone_satelliteconfig.hh"
+ 
+ D878UVLimits::D878UVLimits(const std::initializer_list<std::pair<Frequency, Frequency> > &rxFreqRanges,
+                            const std::initializer_list<std::pair<Frequency, Frequency> > &txFreqRanges,
+@@ -19,6 +19,11 @@ D878UVLimits::D878UVLimits(const std::initializer_list<std::pair<Frequency, Freq
+   _callSignDBImplemented  = true;
+   _numCallSignDBEntries   = 200000;
+ 
++  // Define limits for satellite config
++  _hasSatelliteConfig          = true;
++  _satelliteConfigImplemented  = true;
++  _numSatellites               = AnytoneSatelliteConfig::Limit::satellites();
++
+   /* Define limits for the general settings. */
+   add("settings",
+       new RadioLimitItem{
+diff --git a/lib/dm1701_limits.cc b/lib/dm1701_limits.cc
+index ab0552c..8cb0324 100644
+--- a/lib/dm1701_limits.cc
++++ b/lib/dm1701_limits.cc
+@@ -18,6 +18,11 @@ DM1701Limits::DM1701Limits(QObject *parent)
+   _callSignDBImplemented  = true;
+   _numCallSignDBEntries   = 122197;
+ 
++  // Define limits for satellite config
++  _hasSatelliteConfig          = false;
++  _satelliteConfigImplemented  = false;
++  _numSatellites               = 0;
++
+   add("settings", new RadioLimitItem {
+         { "introLine1", new RadioLimitString(-1, 10, RadioLimitString::Unicode) },
+         { "introLine2", new RadioLimitString(-1, 10, RadioLimitString::Unicode) },
+diff --git a/lib/dmr6x2uv_limits.cc b/lib/dmr6x2uv_limits.cc
+index aeb4d44..96204f3 100644
+--- a/lib/dmr6x2uv_limits.cc
++++ b/lib/dmr6x2uv_limits.cc
+@@ -19,6 +19,11 @@ DMR6X2UVLimits::DMR6X2UVLimits(const std::initializer_list<std::pair<Frequency,
+   _callSignDBImplemented  = true;
+   _numCallSignDBEntries   = 200000;
+ 
++  // Define limits for satellite config
++  _hasSatelliteConfig          = false;
++  _satelliteConfigImplemented  = false;
++  _numSatellites               = 0;
++
+   /* Define limits for the general settings. */
+   add("settings",
+       new RadioLimitItem{
+diff --git a/lib/dr1801uv.cc b/lib/dr1801uv.cc
+index 7385e65..d124651 100644
+--- a/lib/dr1801uv.cc
++++ b/lib/dr1801uv.cc
+@@ -98,6 +98,17 @@ DR1801UV::startUploadCallsignDB(UserDatabase *db, bool blocking, const CallsignD
+   return false;
+ }
+ 
++
++bool
++DR1801UV::startUploadSatelliteConfig(SatelliteDatabase *db, bool blocking, const ErrorStack &err) {
++  Q_UNUSED(db); Q_UNUSED(blocking);
++
++  errMsg(err) << "Satellite config upload is not implemented yet.";
++
++  return false;
++}
++
++
+ void
+ DR1801UV::run() {
+   if (StatusDownload == _task) {
+diff --git a/lib/dr1801uv.hh b/lib/dr1801uv.hh
+index aac561b..082b678 100644
+--- a/lib/dr1801uv.hh
++++ b/lib/dr1801uv.hh
+@@ -38,6 +38,7 @@ public:
+   bool startDownload(bool blocking, const ErrorStack &err);
+   bool startUpload(Config *config, bool blocking, const Codeplug::Flags &flags, const ErrorStack &err);
+   bool startUploadCallsignDB(UserDatabase *db, bool blocking, const CallsignDB::Selection &selection, const ErrorStack &err);
++  bool startUploadSatelliteConfig(SatelliteDatabase *db, bool blocking, const ErrorStack &err);
+ 
+ protected:
+   /** Thread main routine, performs all blocking IO operations for codeplug up- and download. */
+diff --git a/lib/dr1801uv_limits.cc b/lib/dr1801uv_limits.cc
+index 722f643..1fe3fe3 100644
+--- a/lib/dr1801uv_limits.cc
++++ b/lib/dr1801uv_limits.cc
+@@ -17,6 +17,11 @@ DR1801UVLimits::DR1801UVLimits(QObject *parent)
+   _callSignDBImplemented  = false;
+   _numCallSignDBEntries   = 0;
+ 
++  // Define limits for satellite config
++  _hasSatelliteConfig          = false;
++  _satelliteConfigImplemented  = false;
++  _numSatellites               = 0;
++
+   add("settings", new RadioLimitItem {
+         { "introLine1", new RadioLimitString(
+           -1, DR1801UVCodeplug::SettingsElement::Limit::bootLineLength(), RadioLimitString::ASCII) },
+diff --git a/lib/gd73.cc b/lib/gd73.cc
+index bfe9195..80490ab 100644
+--- a/lib/gd73.cc
++++ b/lib/gd73.cc
+@@ -85,15 +85,24 @@ GD73::startUpload(Config *config, bool blocking, const Codeplug::Flags &flags, c
+ 
+ bool
+ GD73::startUploadCallsignDB(UserDatabase *db, bool blocking, const CallsignDB::Selection &selection, const ErrorStack &err) {
+-  Q_UNUSED(db);
+-  Q_UNUSED(blocking);
+-  Q_UNUSED(selection);
++  Q_UNUSED(db); Q_UNUSED(blocking); Q_UNUSED(selection);
+ 
+   errMsg(err) << "Radio does not support a callsign DB.";
+ 
+   return false;
+ }
+ 
++
++bool
++GD73::startUploadSatelliteConfig(SatelliteDatabase *db, bool blocking, const ErrorStack &err) {
++  Q_UNUSED(db); Q_UNUSED(blocking);
++
++  errMsg(err) << "Satellite config upload is not implemented yet.";
++
++  return false;
++}
++
++
+ void
+ GD73::run() {
+   if (StatusDownload == _task) {
+diff --git a/lib/gd73.hh b/lib/gd73.hh
+index abd3835..55759f9 100644
+--- a/lib/gd73.hh
++++ b/lib/gd73.hh
+@@ -48,6 +48,8 @@ public slots:
+   bool startUploadCallsignDB(UserDatabase *db, bool blocking=false,
+                              const CallsignDB::Selection &selection=CallsignDB::Selection(), const ErrorStack &err=ErrorStack());
+ 
++  bool startUploadSatelliteConfig(SatelliteDatabase *db, bool blocking, const ErrorStack &err);
++
+ protected:
+   /** Thread main routine, performs all blocking IO operations for codeplug up- and download. */
+   void run();
+diff --git a/lib/gd73_limits.cc b/lib/gd73_limits.cc
+index 55e374b..ff8c8a9 100644
+--- a/lib/gd73_limits.cc
++++ b/lib/gd73_limits.cc
+@@ -17,6 +17,11 @@ GD73Limits::GD73Limits(QObject *parent)
+   _callSignDBImplemented  = false;
+   _numCallSignDBEntries   = 0;
+ 
++  // Define limits for satellite config
++  _hasSatelliteConfig          = false;
++  _satelliteConfigImplemented  = false;
++  _numSatellites               = 0;
++
+   /* Define limits for the general settings. */
+   add("settings",
+       new RadioLimitItem{
+diff --git a/lib/gd77_limits.cc b/lib/gd77_limits.cc
+index 5271eec..9e25f38 100644
+--- a/lib/gd77_limits.cc
++++ b/lib/gd77_limits.cc
+@@ -17,6 +17,11 @@ GD77Limits::GD77Limits(QObject *parent)
+   _callSignDBImplemented  = true;
+   _numCallSignDBEntries   = 10920;
+ 
++  // Define limits for satellite config
++  _hasSatelliteConfig          = false;
++  _satelliteConfigImplemented  = false;
++  _numSatellites               = 0;
++
+   /* Define limits for the general settings. */
+   add("settings",
+       new RadioLimitItem{
+diff --git a/lib/md2017_limits.cc b/lib/md2017_limits.cc
+index ebf0e22..32d4def 100644
+--- a/lib/md2017_limits.cc
++++ b/lib/md2017_limits.cc
+@@ -18,6 +18,11 @@ MD2017Limits::MD2017Limits(QObject *parent)
+   _callSignDBImplemented  = true;
+   _numCallSignDBEntries   = 122197;
+ 
++  // Define limits for satellite config
++  _hasSatelliteConfig          = false;
++  _satelliteConfigImplemented  = false;
++  _numSatellites               = 0;
++
+   add("settings", new RadioLimitItem {
+         { "introLine1", new RadioLimitString(-1, 10, RadioLimitString::Unicode) },
+         { "introLine2", new RadioLimitString(-1, 10, RadioLimitString::Unicode) },
+diff --git a/lib/md390_limits.cc b/lib/md390_limits.cc
+index 73c00ae..46627aa 100644
+--- a/lib/md390_limits.cc
++++ b/lib/md390_limits.cc
+@@ -19,6 +19,11 @@ MD390Limits::MD390Limits(const std::initializer_list<std::pair<Frequency,Frequen
+   _callSignDBImplemented  = false;
+   _numCallSignDBEntries   = 0;
+ 
++  // Define limits for satellite config
++  _hasSatelliteConfig          = false;
++  _satelliteConfigImplemented  = false;
++  _numSatellites               = 0;
++
+   add("settings", new RadioLimitItem {
+         { "introLine1", new RadioLimitString(-1, 10, RadioLimitString::Unicode) },
+         { "introLine2", new RadioLimitString(-1, 10, RadioLimitString::Unicode) },
+diff --git a/lib/opengd77.cc b/lib/opengd77.cc
+index 9f0ae91..0d510fa 100644
+--- a/lib/opengd77.cc
++++ b/lib/opengd77.cc
+@@ -6,7 +6,7 @@
+ OpenGD77::OpenGD77(OpenGD77Interface *device, QObject *parent)
+   : OpenGD77Base(device, parent), _name("Open GD-77"), _codeplug(), _callsigns()
+ {
+-  // pass...
++  _satelliteConfig = new OpenGD77SatelliteConfig(this);
+ }
+ 
+ 
+diff --git a/lib/opengd77_limits.cc b/lib/opengd77_limits.cc
+index 2c2be69..e90886e 100644
+--- a/lib/opengd77_limits.cc
++++ b/lib/opengd77_limits.cc
+@@ -6,6 +6,8 @@
+ #include "zone.hh"
+ #include "scanlist.hh"
+ #include "roamingzone.hh"
++#include "opengd77_satelliteconfig.hh"
++
+ 
+ 
+ OpenGD77Limits::OpenGD77Limits(QObject *parent)
+@@ -16,6 +18,11 @@ OpenGD77Limits::OpenGD77Limits(QObject *parent)
+   _callSignDBImplemented  = true;
+   _numCallSignDBEntries   = 15796;
+ 
++  // Define limits for satellite config
++  _hasSatelliteConfig          = true;
++  _satelliteConfigImplemented  = true;
++  _numSatellites               = OpenGD77SatelliteConfig::Limit::satellites();
++
+   /* Define limits for the general settings. */
+   add("settings",
+       new RadioLimitItem{
+diff --git a/lib/opengd77_satelliteconfig.cc b/lib/opengd77_satelliteconfig.cc
+new file mode 100644
+index 0000000..28605be
+--- /dev/null
++++ b/lib/opengd77_satelliteconfig.cc
+@@ -0,0 +1,20 @@
++#include "opengd77_satelliteconfig.hh"
++#include "errorstack.hh"
++
++
++OpenGD77SatelliteConfig::OpenGD77SatelliteConfig(QObject *parent)
++  : OpenGD77BaseSatelliteConfig(parent)
++{
++  image(FLASH).addElement(Offset::satellites(), 0x11a0);
++}
++
++
++bool
++OpenGD77SatelliteConfig::encode(SatelliteDatabase *db, const ErrorStack &err) {
++  SatelliteBankElement bank(data(Offset::satellites(), FLASH));
++  if (! bank.encode(db, err)) {
++    errMsg(err) << "Cannot encode satellite config for OpenGD77.";
++    return false;
++  }
++  return true;
++}
+diff --git a/lib/opengd77_satelliteconfig.hh b/lib/opengd77_satelliteconfig.hh
+new file mode 100644
+index 0000000..4c2f36e
+--- /dev/null
++++ b/lib/opengd77_satelliteconfig.hh
+@@ -0,0 +1,36 @@
++#ifndef OPENGD77_SATELLITECONFIG_HH
++#define OPENGD77_SATELLITECONFIG_HH
++
++#include "opengd77base_satelliteconfig.hh"
++
++
++class OpenGD77SatelliteConfig : public OpenGD77BaseSatelliteConfig
++{
++  Q_OBJECT
++
++public:
++  /** Default constructor. */
++  explicit OpenGD77SatelliteConfig(QObject *parent = nullptr);
++
++  /** Encodes the given satellite database. */
++  virtual bool encode(SatelliteDatabase *db, const ErrorStack &err=ErrorStack());
++
++public:
++  /** Some limits for the satellite config. */
++  struct Limit {
++    /** The maximum number of satellites. */
++    static constexpr unsigned int satellites() {
++      return OpenGD77BaseSatelliteConfig::SatelliteBankElement::Limit::satellites();
++    }
++  };
++
++protected:
++  /** Some internal offsets. */
++  struct Offset {
++    /// @cond DO_NOT_DOCUMENT
++    static constexpr unsigned int satellites()        { return 0x000000; }
++    /// @endcond
++  };
++};
++
++#endif // OPENGD77_SATELLITECONFIG_HH
+diff --git a/lib/opengd77base.cc b/lib/opengd77base.cc
+index 2742840..48e1867 100644
+--- a/lib/opengd77base.cc
++++ b/lib/opengd77base.cc
+@@ -10,7 +10,7 @@
+ RadioLimits *OpenGD77Base::_limits = nullptr;
+ 
+ OpenGD77Base::OpenGD77Base(OpenGD77Interface *device, QObject *parent)
+-  : Radio(parent), _dev(device), _config(nullptr)
++  : Radio(parent), _dev(device), _config(nullptr), _satelliteConfig(nullptr)
+ {
+   // pass...
+ }
+@@ -128,6 +128,37 @@ OpenGD77Base::startUploadCallsignDB(UserDatabase *db, bool blocking, const Calls
+ }
+ 
+ 
++bool
++OpenGD77Base::startUploadSatelliteConfig(SatelliteDatabase *db, bool blocking, const ErrorStack &err) {
++  logDebug() << "Start upload to " << name() << "...";
++
++  if (StatusIdle != _task) {
++    logError() << "Cannot upload to radio, radio is not idle.";
++    return false;
++  }
++
++  // Assemble call-sign db from user DB
++  logDebug() << "Encode satellite config..";
++  if (! _satelliteConfig->encode(db, err))
++    return false;
++
++  _task = StatusUploadSatellites;
++  _errorStack = err;
++  if (blocking) {
++    run();
++    return (StatusIdle == _task);
++  }
++
++  // If non-blocking -> move device to this thread
++  if (_dev && _dev->isOpen())
++    _dev->moveToThread(this);
++  // start thread for upload
++  start();
++
++  return true;
++}
++
++
+ void
+ OpenGD77Base::run() {
+   if (StatusDownload == _task) {
+@@ -186,6 +217,26 @@ OpenGD77Base::run() {
+       return;
+     }
+ 
++    _dev->write_finish();
++    _dev->reboot();
++    _dev->close();
++    _task = StatusIdle;
++    emit uploadComplete(this);
++  } else if (StatusUploadSatellites == _task) {
++    if ((nullptr==_dev) || (! _dev->isOpen())) {
++      emit uploadError(this);
++      return;
++    }
++
++    if (! uploadSatellites()) {
++      _task = StatusError;
++      _dev->write_finish();
++      _dev->reboot();
++      _dev->close();
++      emit uploadError(this);
++      return;
++    }
++
+     _dev->write_finish();
+     _dev->reboot();
+     _dev->close();
+@@ -361,3 +412,45 @@ OpenGD77Base::uploadCallsigns()
+   return true;
+ }
+ 
++
++bool
++OpenGD77Base::uploadSatellites()
++{
++  emit uploadStarted();
++
++  // Check every segment in the codeplug
++  if (! _satelliteConfig->isAligned(BSIZE)) {
++    errMsg(_errorStack) << "Cannot upload satellite config: Not aligned with block-size " << BSIZE << "!";
++    return false;
++  }
++
++  size_t totb = _satelliteConfig->memSize();
++
++  if (! _dev->write_start(OpenGD77BaseSatelliteConfig::FLASH, 0, _errorStack)) {
++    errMsg(_errorStack) << "Cannot start satellite config upload.";
++    return false;
++  }
++
++  unsigned bcount = 0;
++  // Then upload config
++  for (int n=0; n<_satelliteConfig->image(OpenGD77BaseSatelliteConfig::FLASH).numElements(); n++) {
++    unsigned addr = _satelliteConfig->image(OpenGD77BaseSatelliteConfig::FLASH).element(n).address();
++    unsigned size = _satelliteConfig->image(OpenGD77BaseSatelliteConfig::FLASH).element(n).data().size();
++    unsigned b0 = addr/BSIZE, nb = size/BSIZE;
++    for (unsigned b=0; b<nb; b++, bcount+=BSIZE) {
++      if (! _dev->write(OpenGD77BaseCodeplug::FLASH, (b0+b)*BSIZE,
++                        _satelliteConfig->data((b0+b)*BSIZE, OpenGD77BaseSatelliteConfig::FLASH),
++                        BSIZE, _errorStack))
++      {
++        errMsg(_errorStack) << "Cannot write block " << (b0+b) << ".";
++        return false;
++      }
++      emit uploadProgress(float(bcount*100)/totb);
++    }
++  }
++
++  _dev->write_finish();
++  return true;
++}
++
++
+diff --git a/lib/opengd77base.hh b/lib/opengd77base.hh
+index f349071..9451974 100644
+--- a/lib/opengd77base.hh
++++ b/lib/opengd77base.hh
+@@ -7,6 +7,7 @@
+ 
+ #include "radio.hh"
+ #include "opengd77_interface.hh"
++#include "opengd77_satelliteconfig.hh"
+ 
+ 
+ /** Implements an common USB interface to Open GD-77(S) type devices.
+@@ -38,6 +39,8 @@ public slots:
+   bool startUploadCallsignDB(UserDatabase *db, bool blocking=false,
+                              const CallsignDB::Selection &selection=CallsignDB::Selection(), const ErrorStack &err=ErrorStack());
+ 
++  bool startUploadSatelliteConfig(SatelliteDatabase *db, bool blocking, const ErrorStack &err);
++
+ protected:
+   /** Thread main routine, performs all blocking IO operations for codeplug up- and download. */
+ 	void run();
+@@ -48,12 +51,16 @@ protected:
+   bool upload();
+   /** Implements the actual callsign DB upload process. */
+   bool uploadCallsigns();
++  /** Implements the actual satellite config upload process. */
++  bool uploadSatellites();
+ 
+ protected:
+   /** The interface to the radio. */
+   OpenGD77Interface *_dev;
+   /** The generic configuration. */
+ 	Config *_config;
++  /** The encoded eatellite configuraiton. */
++  OpenGD77BaseSatelliteConfig *_satelliteConfig;
+ 
+ private:
+   /** Holds the singleton instance. */
+diff --git a/lib/opengd77base_codeplug.cc b/lib/opengd77base_codeplug.cc
+index b801a3e..992e1d4 100644
+--- a/lib/opengd77base_codeplug.cc
++++ b/lib/opengd77base_codeplug.cc
+@@ -1714,272 +1714,6 @@ OpenGD77BaseCodeplug::ZoneBankElement::link(Context &ctx, const ErrorStack &err)
+ 
+ 
+ 
+-/* ********************************************************************************************* *
+- * Implementation of OpenGD77BaseCodeplug::OrbitalElement
+- * ********************************************************************************************* */
+-OpenGD77BaseCodeplug::OrbitalElement::OrbitalElement(uint8_t *ptr, size_t size)
+-  : Element(ptr, size)
+-{
+-  // pass...
+-}
+-
+-OpenGD77BaseCodeplug::OrbitalElement::OrbitalElement(uint8_t *ptr)
+-  : Element(ptr, size())
+-{
+-  // pass...
+-}
+-
+-
+-void
+-OpenGD77BaseCodeplug::OrbitalElement::clear() {
+-  memset(_data, 0, size());
+-}
+-
+-
+-void
+-OpenGD77BaseCodeplug::OrbitalElement::writeDigit(const Offset::Bit &offset, uint8_t digit) {
+-  // Must be bit 0 or 4 (BCD)
+-  if (offset.bit % 4)
+-    return;
+-
+-  uint8_t val = getUInt8(offset.byte);
+-  val &= ~(0xf << offset.bit);
+-  val |= ((digit & 0xf) << offset.bit);
+-  setUInt8(offset.byte, val);
+-}
+-
+-
+-void
+-OpenGD77BaseCodeplug::OrbitalElement::writeInteger(const Offset::Bit &offset, int value, bool sign, unsigned int dec) {
+-  unsigned int o = 0;
+-  // Must be bit 0 or 4 (BCD)
+-  if (offset.bit % 4)
+-    return;
+-  if (0 == dec)
+-    return;
+-
+-  if (sign && 0 > value)
+-    writeDigit(offset + o, 0xc); // '-' ?!?
+-  else
+-    writeDigit(offset + o, 0xb); // blank
+-
+-  o += 4*(dec-1);
+-  for (int i=dec; i>0; i++, o = o - 4) {
+-    if (value)
+-      writeDigit(offset + o, value % 10);
+-    else
+-      writeDigit(offset + o, 0xb);
+-    value /= 10;
+-  }
+-}
+-
+-
+-void
+-OpenGD77BaseCodeplug::OrbitalElement::writeFractional(const Offset::Bit &offset, double value, bool sign, unsigned int frac) {
+-  unsigned int o = 0;
+-  if (offset.bit % 4)
+-    return;
+-
+-  if (0 == frac)
+-    return;
+-
+-  if (sign && (0 > value))
+-    writeDigit(offset + o, 0xc);
+-  else
+-    writeDigit(offset + o, 0xb);
+-  o += 4;
+-
+-  value -= int(value);
+-  for (unsigned int i=0; i<frac; i++, o += 4) {
+-    value *= 10;
+-    writeDigit(offset + o, int(value));
+-    value -= int(value);
+-  }
+-}
+-
+-
+-void
+-OpenGD77BaseCodeplug::OrbitalElement::writeFixedPoint(const Offset::Bit &offset, double value, bool sign, unsigned int dec, unsigned int frac) {
+-  unsigned int o = 0;
+-  writeInteger(offset + o, value, sign, dec);
+-  o += 4*dec + (sign ? 4 : 0);
+-
+-  writeDigit(offset + o, 0xa);
+-  o += 4;
+-
+-  value = std::abs(value);
+-  value -= int(value);
+-  writeFractional(offset + o, value, false, frac);
+-}
+-
+-
+-void
+-OpenGD77BaseCodeplug::OrbitalElement::setName(const QString &name) {
+-  writeASCII(Offset::name(), name, Limit::nameLength(), 0x00);
+-}
+-
+-void
+-OpenGD77BaseCodeplug::OrbitalElement::setEpoch(const::OrbitalElement::Epoch &epoch) {
+-  writeInteger(Offset::epochYear(), epoch.year%100, false, 2);
+-  writeFixedPoint(Offset::epochJulienDay(), epoch.toEpoch(), false, 3, 8);
+-}
+-
+-void
+-OpenGD77BaseCodeplug::OrbitalElement::setMeanMotionDerivative(double dmm) {
+-  writeFixedPoint(Offset::meanMotionDerivative(), dmm, true, 0, 8);
+-}
+-
+-void
+-OpenGD77BaseCodeplug::OrbitalElement::setInclination(double incl) {
+-  writeFixedPoint(Offset::inclination(), incl, false, 3, 4);
+-}
+-
+-void
+-OpenGD77BaseCodeplug::OrbitalElement::setAscension(double asc) {
+-  writeFixedPoint(Offset::ascension(), asc, false, 3, 4);
+-}
+-
+-void
+-OpenGD77BaseCodeplug::OrbitalElement::setEccentricity(double ecc) {
+-  writeFractional(Offset::eccentricity(), ecc, false, 7);
+-}
+-
+-void
+-OpenGD77BaseCodeplug::OrbitalElement::setPerigee(double arg) {
+-  writeFixedPoint(Offset::perigee(), arg, false, 3, 4);
+-}
+-
+-void
+-OpenGD77BaseCodeplug::OrbitalElement::setMeanAnomaly(double ma) {
+-  writeFixedPoint(Offset::meanAnomaly(), ma, false, 3, 4);
+-}
+-
+-void
+-OpenGD77BaseCodeplug::OrbitalElement::setMeanMotion(double mm) {
+-  writeFixedPoint(Offset::meanMotion(), mm, false, 2, 8);
+-}
+-
+-void
+-OpenGD77BaseCodeplug::OrbitalElement::setRevolutionNumber(unsigned int num) {
+-  writeInteger(Offset::revolutionNumber(), num, false, 5);
+-}
+-
+-
+-void
+-OpenGD77BaseCodeplug::OrbitalElement::setFMDownlink(const Frequency &f) {
+-  setUInt32_le(Offset::fmDownlink(), f.inHz()/10);
+-}
+-
+-void
+-OpenGD77BaseCodeplug::OrbitalElement::setFMUplink(const Frequency &f) {
+-  setUInt32_le(Offset::fmUplink(), f.inHz()/10);
+-}
+-
+-void
+-OpenGD77BaseCodeplug::OrbitalElement::setCTCSS(const SelectiveCall &call) {
+-  if (! call.isCTCSS())
+-    return;
+-  setUInt32_le(Offset::ctcss(), call.mHz()/100);
+-}
+-
+-void
+-OpenGD77BaseCodeplug::OrbitalElement::setAPRSDownlink(const Frequency &f) {
+-  setUInt32_le(Offset::aprsDownlink(), f.inHz()/10);
+-}
+-
+-void
+-OpenGD77BaseCodeplug::OrbitalElement::setAPRSUplink(const Frequency &f) {
+-  setUInt32_le(Offset::aprsUplink(), f.inHz()/10);
+-}
+-
+-
+-void
+-OpenGD77BaseCodeplug::OrbitalElement::setBeacon(const Frequency &f) {
+-  setUInt32_le(Offset::beacon(), f.inHz()/10);
+-}
+-
+-
+-void
+-OpenGD77BaseCodeplug::OrbitalElement::setAPRSPath(const QString &path) {
+-  writeASCII(Offset::aprsPath(), path, Limit::pathLength(), 0x00);
+-}
+-
+-
+-bool
+-OpenGD77BaseCodeplug::OrbitalElement::encode(const Satellite &sat, const ErrorStack &err) {
+-  Q_UNUSED(err);
+-
+-  // meta
+-  setName(sat.name());
+-
+-  // orbital elements
+-  setMeanMotion(sat.meanMotion());
+-  setMeanMotionDerivative(sat.meanMotionDerivative());
+-  setInclination(sat.inclination());
+-  setAscension(sat.ascension());
+-  setEccentricity(sat.eccentricity());
+-  setPerigee(sat.perigee());
+-  setMeanAnomaly(sat.meanAnomaly());
+-  setRevolutionNumber(sat.revolutionNumber());
+-
+-  // transponder
+-  setFMDownlink(sat.fmDownlink());
+-  setFMUplink(sat.fmUplink());
+-  setCTCSS(sat.fmUplinkTone());
+-  setAPRSDownlink(sat.aprsDownlink());
+-  setAPRSUplink(sat.aprsUplink());
+-  setBeacon(sat.beacon());
+-
+-  /// @bug set APRS path
+-
+-  return true;
+-}
+-
+-
+-
+-/* ********************************************************************************************* *
+- * Implementation of OpenGD77BaseCodeplug::OrbitalBankElement
+- * ********************************************************************************************* */
+-OpenGD77BaseCodeplug::OrbitalBankElement::OrbitalBankElement(uint8_t *ptr, size_t size)
+-  : Element(ptr, size)
+-{
+-  // pass...
+-}
+-
+-OpenGD77BaseCodeplug::OrbitalBankElement::OrbitalBankElement(uint8_t *ptr)
+-  : Element(ptr, size())
+-{
+-  // pass...
+-}
+-
+-
+-OpenGD77BaseCodeplug::OrbitalElement
+-OpenGD77BaseCodeplug::OrbitalBankElement::element(unsigned int i) const {
+-  return OrbitalElement(_data + Offset::elements() + i*Offset::betweenElements());
+-}
+-
+-
+-bool
+-OpenGD77BaseCodeplug::OrbitalBankElement::encode(Context &ctx, const ErrorStack &err) {
+-  const SatelliteDatabase *db = ctx.satellites();
+-
+-  for (unsigned int i=0; i<Limit::elements(); i++) {
+-    if (db && (i<db->count())) {
+-      const Satellite &sat = db->getAt(i);
+-      if (! element(i).encode(sat)) {
+-        errMsg(err) << "Cannot encode satellite '" << sat.name() << "' at index " << i << ".";
+-        return false;
+-      }
+-    } else {
+-      element(i).clear();
+-    }
+-  }
+-
+-  return true;
+-}
+-
+-
+-
+ /* ********************************************************************************************* *
+  * Implementation of OpenGD77BaseCodeplug::ContactElement
+  * ********************************************************************************************* */
+diff --git a/lib/opengd77base_codeplug.hh b/lib/opengd77base_codeplug.hh
+index b9cdaa0..364fbb8 100644
+--- a/lib/opengd77base_codeplug.hh
++++ b/lib/opengd77base_codeplug.hh
+@@ -916,162 +916,6 @@ public:
+   };
+ 
+ 
+-  /** Encodes an orbital element of OpenGD77 devices. */
+-  class OrbitalElement: public Element
+-  {
+-  protected:
+-    /** Hidden constructor. */
+-    OrbitalElement(uint8_t *ptr, size_t size);
+-
+-  public:
+-    /** Constructor. */
+-    OrbitalElement(uint8_t *ptr);
+-
+-    /** The size of the element. */
+-    static constexpr unsigned int size() { return 0x0064; }
+-
+-    void clear();
+-
+-    /** Sets the name of the element. */
+-    virtual void setName(const QString &name);
+-
+-    /** Sets the epoch. */
+-    virtual void setEpoch(const ::OrbitalElement::Epoch &epoch);
+-    /** Sets the first derivative of mean motion. */
+-    virtual void setMeanMotion(double mm);
+-    /** Sets the first derivative of mean motion. */
+-    virtual void setMeanMotionDerivative(double dmm);
+-    /** Sets the inclination. */
+-    virtual void setInclination(double incl);
+-    /** Right ascension of the ascending node. */
+-    virtual void setAscension(double asc);
+-    /** Sets eccentricity. */
+-    virtual void setEccentricity(double ecc);
+-    /** Sets argument of perigee. */
+-    virtual void setPerigee(double arg);
+-    /** Set the mean anomaly. */
+-    virtual void setMeanAnomaly(double ma);
+-    /** Sets the revolution number at epoch. */
+-    virtual void setRevolutionNumber(unsigned int num);
+-
+-    /** Sets the downlink frequency. */
+-    void setFMDownlink(const Frequency &f);
+-    /** Sets the uplink frequency. */
+-    void setFMUplink(const Frequency &f);
+-    /** Sets the CTCSS tone. */
+-    void setCTCSS(const SelectiveCall &call);
+-    /** Sets the APRS downlink frequency. */
+-    void setAPRSDownlink(const Frequency &f);
+-    /** Sets the APRS uplink frequency. */
+-    void setAPRSUplink(const Frequency &f);
+-
+-    /** Sets the beacon frequency. */
+-    void setBeacon(const Frequency &f);
+-
+-    /** Sets the APRS path. */
+-    void setAPRSPath(const QString &path);
+-
+-    /** Encodes a satellite. */
+-    virtual bool encode(const Satellite &sat, const ErrorStack &err = ErrorStack());
+-
+-  protected:
+-    /** Writes a fixed point value as a BCD number. Using 0-9 as digits, ah as decimal dot and bh
+-     * as blank.
+-     * @param offset Specifies, where to write the fixed point value.
+-     * @param value The value to write.
+-     * @param sign If @c true, a sign is written.
+-     * @param dec The number of digits in the integer part.
+-     * @param frac The number of digits in the fractional part.
+-     */
+-    void writeFixedPoint(const Offset::Bit &offset, double value, bool sign, unsigned int dec, unsigned int frac);
+-    /** Writes a fixed point value as a BCD number. Using 0-9 as digits and bh as blank. In contrast
+-     * to @c writeFixedPoint, this function expects no integer part.
+-     * @param offset Specifies, where to write the fixed point value.
+-     * @param value The value to write.
+-     * @param sign If @c true, a sign is written.
+-     * @param frac The number of digits in the fractional part.
+-     */
+-    void writeFractional(const Offset::Bit &offset, double value, bool sign, unsigned int frac);
+-    /** Write a fixed digit integer value. */
+-    void writeInteger(const Offset::Bit &offset, int value, bool sign, unsigned dec);
+-    /** Writes a single digit at the given offset. */
+-    void writeDigit(const Offset::Bit &offset, uint8_t digit);
+-
+-  public:
+-    /** Some limits for the zone bank. */
+-    struct Limit: public Element::Limit {
+-      /** The maximum name length. */
+-      static constexpr unsigned int nameLength() { return 8; }
+-      /** Maximum length of the APRS path. */
+-      static constexpr unsigned int pathLength() { return 24; }
+-    };
+-
+-  protected:
+-    /** Some internal offsets within the element. */
+-    struct Offset: public Element::Offset {
+-      /// @cond DO_NOT_DOCUMENT
+-      static constexpr unsigned int name()         { return 0x0000; }
+-      static constexpr Bit epochYear()             { return {0x0008, 4}; }
+-      static constexpr Bit epochJulienDay()        { return {0x0009, 4}; }
+-      static constexpr Bit meanMotionDerivative()  { return {0x000f, 4}; }
+-      static constexpr Bit inclination()           { return {0x0014, 4}; }
+-      static constexpr Bit ascension()             { return {0x0018, 4}; }
+-      static constexpr Bit eccentricity()          { return {0x001c, 4}; }
+-      static constexpr Bit perigee()               { return {0x001f, 0}; }
+-      static constexpr Bit meanAnomaly()           { return {0x0023, 0}; }
+-      static constexpr Bit meanMotion()            { return {0x0027, 0}; }
+-      static constexpr Bit revolutionNumber()      { return {0x002d, 4}; }
+-      static constexpr unsigned int fmDownlink()   { return 0x0030; }
+-      static constexpr unsigned int fmUplink()     { return 0x0034; }
+-      static constexpr unsigned int ctcss()        { return 0x0038; }
+-      static constexpr unsigned int aprsDownlink() { return 0x003c; }
+-      static constexpr unsigned int aprsUplink()   { return 0x0040; }
+-      static constexpr unsigned int beacon()       { return 0x0044; }
+-      static constexpr unsigned int aprsPath()     { return 0x004c; }
+-      /// @endcond
+-    };
+-  };
+-
+-
+-  /** Implements a bank of several satellites for all OpenGD77 codeplugs. */
+-  class OrbitalBankElement: public Element
+-  {
+-  protected:
+-    /** Hidden constructor. */
+-    OrbitalBankElement(uint8_t *ptr, size_t size);
+-
+-  public:
+-    /** Constructor. */
+-    OrbitalBankElement(uint8_t *ptr);
+-
+-    /** The size of the element. */
+-    static constexpr unsigned int size() { return 0x09cc; }
+-
+-    /** Returns the i-th orbital element. */
+-    OrbitalElement element(unsigned int i) const;
+-
+-    /** Encodes the given satellites. */
+-    virtual bool encode(Context &ctx, const ErrorStack &err = ErrorStack());
+-
+-  public:
+-    /** Some limits for the element. */
+-    struct Limit: public Element::Limit {
+-      /** Maximum number of orbital elements. */
+-      static constexpr unsigned int elements() { return 25; }
+-    };
+-
+-  protected:
+-    /** Some internal offset. */
+-    struct Offset: public Element::Offset
+-    {
+-      /// @cond DO_NOT_DOCUMENT
+-      static constexpr unsigned int elements() { return 0x0008; }
+-      static constexpr unsigned int betweenElements() { return OrbitalElement::size(); }
+-      /// @endcond
+-    };
+-  };
+-
+-
+   /** Implements digital contacts in OpenGD77 codeplugs. */
+   class ContactElement: public Element
+   {
+diff --git a/lib/opengd77base_satelliteconfig.cc b/lib/opengd77base_satelliteconfig.cc
+new file mode 100644
+index 0000000..9b35164
+--- /dev/null
++++ b/lib/opengd77base_satelliteconfig.cc
+@@ -0,0 +1,292 @@
++#include "opengd77base_satelliteconfig.hh"
++#include "satellitedatabase.hh"
++
++
++/* ********************************************************************************************* *
++ * Implementation of OpenGD77BaseSatelliteConfig::SatelliteElement
++ * ********************************************************************************************* */
++OpenGD77BaseSatelliteConfig::SatelliteElement::SatelliteElement(uint8_t *ptr, size_t size)
++  : Element(ptr, size)
++{
++  // pass...
++}
++
++OpenGD77BaseSatelliteConfig::SatelliteElement::SatelliteElement(uint8_t *ptr)
++  : Element(ptr, size())
++{
++  // pass...
++}
++
++
++void
++OpenGD77BaseSatelliteConfig::SatelliteElement::clear() {
++  memset(_data, 0, size());
++}
++
++
++void
++OpenGD77BaseSatelliteConfig::SatelliteElement::writeDigit(const Offset::Bit &offset, uint8_t digit) {
++  // Must be bit 0 or 3 (BCD)
++  if (offset.bit % 4)
++    return;
++
++  uint8_t val = getUInt8(offset.byte);
++  val &= ~(0xf << offset.bit);
++  val |= ((digit & 0xf) << offset.bit);
++  setUInt8(offset.byte, val);
++}
++
++
++void
++OpenGD77BaseSatelliteConfig::SatelliteElement::writeInteger(const Offset::Bit &offset, int value, bool sign, unsigned int dec) {
++  unsigned int o = 0;
++  // Must be bit 0 or 4 (BCD)
++  if (offset.bit % 4)
++    return;
++  if (0 == dec)
++    return;
++
++  if (sign && 0 > value)
++    writeDigit(offset + o, 0xc); // '-' ?!?
++  else
++    writeDigit(offset + o, 0xb); // blank
++
++  o += 4*(dec-1);
++  for (int i=dec; i>0; i--, o = o - 4) {
++    writeDigit(offset + o, value % 10);
++    value /= 10;
++  }
++}
++
++
++void
++OpenGD77BaseSatelliteConfig::SatelliteElement::writeFractional(const Offset::Bit &offset, double value, bool sign, unsigned int frac) {
++  unsigned int o = 0;
++  if (offset.bit % 4)
++    return;
++
++  if (0 == frac)
++    return;
++
++  if (sign) {
++    if (0 > value)
++      writeDigit(offset + o, 0xc);
++    else
++      writeDigit(offset + o, 0xb);
++    o += 4;
++  }
++
++  value -= int(value);
++  for (unsigned int i=0; i<frac; i++, o += 4) {
++    value *= 10;
++    writeDigit(offset + o, int(value));
++    value -= int(value);
++  }
++}
++
++
++void
++OpenGD77BaseSatelliteConfig::SatelliteElement::writeFixedPoint(const Offset::Bit &offset, double value, bool sign, unsigned int dec, unsigned int frac) {
++  unsigned int o = 0;
++  writeInteger(offset + o, value, sign, dec);
++  o += 4*dec + (sign ? 4 : 0);
++
++  writeDigit(offset + o, 0xa);
++  o += 4;
++
++  value = std::abs(value);
++  value -= int(value);
++  writeFractional(offset + o, value, false, frac);
++}
++
++
++void
++OpenGD77BaseSatelliteConfig::SatelliteElement::setName(const QString &name) {
++  writeASCII(Offset::name(), name, Limit::nameLength(), 0x00);
++}
++
++void
++OpenGD77BaseSatelliteConfig::SatelliteElement::setEpoch(const OrbitalElement::Epoch &epoch) {
++  writeInteger(Offset::epochYear(), epoch.year%100, false, 2);
++  writeFixedPoint(Offset::epochJulienDay(), epoch.toEpoch(), false, 3, 8);
++}
++
++void
++OpenGD77BaseSatelliteConfig::SatelliteElement::setMeanMotionDerivative(double dmm) {
++  writeFixedPoint(Offset::meanMotionDerivative(), dmm, true, 0, 8);
++}
++
++void
++OpenGD77BaseSatelliteConfig::SatelliteElement::setInclination(double incl) {
++  writeFixedPoint(Offset::inclination(), incl, false, 3, 4);
++}
++
++void
++OpenGD77BaseSatelliteConfig::SatelliteElement::setAscension(double asc) {
++  writeFixedPoint(Offset::ascension(), asc, false, 3, 4);
++}
++
++void
++OpenGD77BaseSatelliteConfig::SatelliteElement::setEccentricity(double ecc) {
++  writeFractional(Offset::eccentricity(), ecc, false, 7);
++}
++
++void
++OpenGD77BaseSatelliteConfig::SatelliteElement::setPerigee(double arg) {
++  writeFixedPoint(Offset::perigee(), arg, false, 3, 4);
++}
++
++void
++OpenGD77BaseSatelliteConfig::SatelliteElement::setMeanAnomaly(double ma) {
++  writeFixedPoint(Offset::meanAnomaly(), ma, false, 3, 4);
++}
++
++void
++OpenGD77BaseSatelliteConfig::SatelliteElement::setMeanMotion(double mm) {
++  writeFixedPoint(Offset::meanMotion(), mm, false, 2, 8);
++}
++
++void
++OpenGD77BaseSatelliteConfig::SatelliteElement::setRevolutionNumber(unsigned int num) {
++  writeInteger(Offset::revolutionNumber(), num, false, 5);
++}
++
++
++void
++OpenGD77BaseSatelliteConfig::SatelliteElement::setFMDownlink(const Frequency &f) {
++  setUInt32_le(Offset::fmDownlink(), f.inHz());
++}
++
++void
++OpenGD77BaseSatelliteConfig::SatelliteElement::setFMUplink(const Frequency &f) {
++  setUInt32_le(Offset::fmUplink(), f.inHz());
++}
++
++void
++OpenGD77BaseSatelliteConfig::SatelliteElement::setCTCSS(const SelectiveCall &call) {
++  if (! call.isCTCSS())
++    return;
++  setUInt32_le(Offset::ctcss(), call.mHz()/100);
++}
++
++void
++OpenGD77BaseSatelliteConfig::SatelliteElement::setAPRSDownlink(const Frequency &f) {
++  setUInt32_le(Offset::aprsDownlink(), f.inHz());
++}
++
++void
++OpenGD77BaseSatelliteConfig::SatelliteElement::setAPRSUplink(const Frequency &f) {
++  setUInt32_le(Offset::aprsUplink(), f.inHz());
++}
++
++
++void
++OpenGD77BaseSatelliteConfig::SatelliteElement::setBeacon(const Frequency &f) {
++  setUInt32_le(Offset::beacon(), f.inHz());
++}
++
++
++void
++OpenGD77BaseSatelliteConfig::SatelliteElement::setAPRSPath(const QString &path) {
++  writeASCII(Offset::aprsPath(), path, Limit::pathLength(), 0x00);
++}
++
++
++bool
++OpenGD77BaseSatelliteConfig::SatelliteElement::encode(const Satellite &sat, const ErrorStack &err) {
++  Q_UNUSED(err);
++
++  // meta
++  setName(sat.name());
++
++  // orbital elements
++  setEpoch(sat.epoch());
++  setMeanMotion(sat.meanMotion());
++  setMeanMotionDerivative(sat.meanMotionDerivative());
++  setInclination(sat.inclination());
++  setAscension(sat.ascension());
++  setEccentricity(sat.eccentricity());
++  setPerigee(sat.perigee());
++  setMeanAnomaly(sat.meanAnomaly());
++  setRevolutionNumber(sat.revolutionNumber());
++
++  // transponder
++  setFMDownlink(sat.fmDownlink());
++  setFMUplink(sat.fmUplink());
++  setCTCSS(sat.fmUplinkTone());
++  setAPRSDownlink(sat.aprsDownlink());
++  setAPRSUplink(sat.aprsUplink());
++  setBeacon(sat.beacon());
++
++  /// @bug set APRS path
++
++  return true;
++}
++
++
++
++/* ********************************************************************************************* *
++ * Implementation of OpenGD77BaseSatelliteConfig::SatelliteBankElement
++ * ********************************************************************************************* */
++OpenGD77BaseSatelliteConfig::SatelliteBankElement::SatelliteBankElement(uint8_t *ptr, size_t size)
++  : Element(ptr, size)
++{
++  // pass...
++}
++
++OpenGD77BaseSatelliteConfig::SatelliteBankElement::SatelliteBankElement(uint8_t *ptr)
++  : Element(ptr, size())
++{
++  // pass...
++}
++
++
++void
++OpenGD77BaseSatelliteConfig::SatelliteBankElement::clear() {
++  memset(_data, 0, size());
++  writeASCII(Offset::label(), "OpenGD77", 8);
++  setUInt32_le(Offset::unknownInteger0(), 1);
++  setUInt32_le(Offset::unknownInteger1(), 3);
++  setUInt32_le(Offset::segmentSize(), size());
++}
++
++
++OpenGD77BaseSatelliteConfig::SatelliteElement
++OpenGD77BaseSatelliteConfig::SatelliteBankElement::satellite(unsigned int idx) {
++  return SatelliteElement(_data + Offset::satellites() + idx*Offset::betweenSatellites());
++}
++
++bool
++OpenGD77BaseSatelliteConfig::SatelliteBankElement::encode(SatelliteDatabase *db, const ErrorStack &err) {
++  clear();
++
++  for (unsigned int i=0; i<Limit::satellites(); i++) {
++    SatelliteElement el = satellite(i);
++    el.clear();
++    if (db->count() <= i)
++      continue;
++    if (! el.encode(db->getAt(i), err)) {
++      errMsg(err) << "Cannot encode satellite '" << db->getAt(i).name()
++                  << "' at index " << i << ".";
++      return false;
++    }
++  }
++
++  return true;
++}
++
++
++
++
++
++
++
++/* ********************************************************************************************* *
++ * Implementation of OpenGD77BaseSatelliteConfig
++ * ********************************************************************************************* */
++OpenGD77BaseSatelliteConfig::OpenGD77BaseSatelliteConfig(QObject *parent)
++  : SatelliteConfig{parent}
++{
++  addImage("OpenGD77 satellite configuration EEPROM");
++  addImage("OpenGD77 satellite configuration FLASH");
++}
+diff --git a/lib/opengd77base_satelliteconfig.hh b/lib/opengd77base_satelliteconfig.hh
+new file mode 100644
+index 0000000..8d4a5d1
+--- /dev/null
++++ b/lib/opengd77base_satelliteconfig.hh
+@@ -0,0 +1,191 @@
++#ifndef OPENGD77BASE_SATELLITECONFIG_HH
++#define OPENGD77BASE_SATELLITECONFIG_HH
++
++#include <orbitalelementsdatabase.hh>
++#include <satelliteconfig.hh>
++#include <frequency.hh>
++#include <signaling.hh>
++#include <satellitedatabase.hh>
++#include <codeplug.hh>
++
++
++/** Implements the satellite tracking configuration for the OpenGD77 type radios.
++ * @ingroup ogd77 */
++class OpenGD77BaseSatelliteConfig : public SatelliteConfig
++{
++  Q_OBJECT
++
++public:
++  /** Possible image types. */
++  enum ImageType { EEPROM = 0, FLASH = 1 };
++
++public:
++  /** Encodes a satellite for the  OpenGD77 devices.
++   * That is a set of orbital elements and transponder information. */
++  class SatelliteElement: public Codeplug::Element
++  {
++  protected:
++    /** Hidden constructor. */
++    SatelliteElement(uint8_t *ptr, size_t size);
++
++  public:
++    /** Constructor. */
++    SatelliteElement(uint8_t *ptr);
++
++    /** The size of the element. */
++    static constexpr unsigned int size() { return 0x0064; }
++
++    void clear();
++
++    /** Sets the name of the element. */
++    virtual void setName(const QString &name);
++
++    /** Sets the epoch. */
++    virtual void setEpoch(const ::OrbitalElement::Epoch &epoch);
++    /** Sets the first derivative of mean motion. */
++    virtual void setMeanMotion(double mm);
++    /** Sets the first derivative of mean motion. */
++    virtual void setMeanMotionDerivative(double dmm);
++    /** Sets the inclination. */
++    virtual void setInclination(double incl);
++    /** Right ascension of the ascending node. */
++    virtual void setAscension(double asc);
++    /** Sets eccentricity. */
++    virtual void setEccentricity(double ecc);
++    /** Sets argument of perigee. */
++    virtual void setPerigee(double arg);
++    /** Set the mean anomaly. */
++    virtual void setMeanAnomaly(double ma);
++    /** Sets the revolution number at epoch. */
++    virtual void setRevolutionNumber(unsigned int num);
++
++    /** Sets the downlink frequency. */
++    void setFMDownlink(const Frequency &f);
++    /** Sets the uplink frequency. */
++    void setFMUplink(const Frequency &f);
++    /** Sets the CTCSS tone. */
++    void setCTCSS(const SelectiveCall &call);
++    /** Sets the APRS downlink frequency. */
++    void setAPRSDownlink(const Frequency &f);
++    /** Sets the APRS uplink frequency. */
++    void setAPRSUplink(const Frequency &f);
++
++    /** Sets the beacon frequency. */
++    void setBeacon(const Frequency &f);
++
++    /** Sets the APRS path. */
++    void setAPRSPath(const QString &path);
++
++    /** Encodes a satellite. */
++    virtual bool encode(const Satellite &sat, const ErrorStack &err = ErrorStack());
++
++  protected:
++    /** Writes a fixed point value as a BCD number. Using 0-9 as digits, ah as decimal dot and bh
++     * as blank.
++     * @param offset Specifies, where to write the fixed point value.
++     * @param value The value to write.
++     * @param sign If @c true, a sign is written.
++     * @param dec The number of digits in the integer part.
++     * @param frac The number of digits in the fractional part.
++     */
++    void writeFixedPoint(const Offset::Bit &offset, double value, bool sign, unsigned int dec, unsigned int frac);
++    /** Writes a fixed point value as a BCD number. Using 0-9 as digits and bh as blank. In contrast
++     * to @c writeFixedPoint, this function expects no integer part.
++     * @param offset Specifies, where to write the fixed point value.
++     * @param value The value to write.
++     * @param sign If @c true, a sign is written.
++     * @param frac The number of digits in the fractional part.
++     */
++    void writeFractional(const Offset::Bit &offset, double value, bool sign, unsigned int frac);
++    /** Write a fixed digit integer value. */
++    void writeInteger(const Offset::Bit &offset, int value, bool sign, unsigned dec);
++    /** Writes a single digit at the given offset. */
++    void writeDigit(const Offset::Bit &offset, uint8_t digit);
++
++  public:
++    /** Some limits for the zone bank. */
++    struct Limit: public Element::Limit {
++      /** The maximum name length. */
++      static constexpr unsigned int nameLength() { return 8; }
++      /** Maximum length of the APRS path. */
++      static constexpr unsigned int pathLength() { return 24; }
++    };
++
++  protected:
++    /** Some internal offsets within the element. */
++    struct Offset: public Element::Offset {
++      /// @cond DO_NOT_DOCUMENT
++      static constexpr unsigned int name()         { return 0x0000; }
++      static constexpr Bit epochYear()             { return {0x0008, 4}; }
++      static constexpr Bit epochJulienDay()        { return {0x0009, 4}; }
++      static constexpr Bit meanMotionDerivative()  { return {0x000f, 4}; }
++      static constexpr Bit inclination()           { return {0x0014, 4}; }
++      static constexpr Bit ascension()             { return {0x0018, 4}; }
++      static constexpr Bit eccentricity()          { return {0x001c, 4}; }
++      static constexpr Bit perigee()               { return {0x001f, 0}; }
++      static constexpr Bit meanAnomaly()           { return {0x0023, 0}; }
++      static constexpr Bit meanMotion()            { return {0x0027, 0}; }
++      static constexpr Bit revolutionNumber()      { return {0x002d, 4}; }
++      static constexpr unsigned int fmDownlink()   { return 0x0030; }
++      static constexpr unsigned int fmUplink()     { return 0x0034; }
++      static constexpr unsigned int ctcss()        { return 0x0038; }
++      static constexpr unsigned int aprsDownlink() { return 0x003c; }
++      static constexpr unsigned int aprsUplink()   { return 0x0040; }
++      static constexpr unsigned int beacon()       { return 0x0044; }
++      static constexpr unsigned int aprsPath()     { return 0x004c; }
++      /// @endcond
++    };
++  };
++
++
++  /** Implements the satellite config bank. Holding all satellites to track. */
++  class SatelliteBankElement: Codeplug::Element
++  {
++  protected:
++    /** Hidden constructor. */
++    SatelliteBankElement(uint8_t *ptr, size_t size);
++
++  public:
++    /** Constructor. */
++    SatelliteBankElement(uint8_t *ptr);
++
++    /** The size of the element. */
++    static constexpr unsigned int size() { return 0x09d8; }
++
++    void clear();
++
++    /** Returns the i-th satellite. */
++    SatelliteElement satellite(unsigned int idx);
++    /** Encodes the given satellite database. */
++    bool encode(SatelliteDatabase *db, const ErrorStack &err=ErrorStack());
++
++  public:
++    /** Some limits for the satellite config. */
++    struct Limit {
++      /** The maximum number of satellites. */
++      static constexpr unsigned int satellites() { return 25; }
++    };
++
++  protected:
++    /** Some internal offsets. */
++    struct Offset {
++      /// @cond DO_NOT_DOCUMENT
++      static constexpr unsigned int label()             { return 0x0000; }
++      static constexpr unsigned int unknownInteger0()   { return 0x0008; }
++      static constexpr unsigned int unknownInteger1()   { return 0x000c; }
++      static constexpr unsigned int segmentSize()       { return 0x0010; }
++      static constexpr unsigned int satellites()        { return 0x0014; }
++      static constexpr unsigned int betweenSatellites() { return SatelliteElement::size(); }
++      /// @endcond
++    };
++  };
++
++public:
++  /** Default constructor. */
++  explicit OpenGD77BaseSatelliteConfig(QObject *parent = nullptr);
++
++  /** Encodes the given satellite database. */
++  virtual bool encode(SatelliteDatabase *db, const ErrorStack &err=ErrorStack()) = 0;
++};
++
++#endif // OPENGD77BASE_SATELLITECONFIG_HH
+diff --git a/lib/openuv380.cc b/lib/openuv380.cc
+index b3362f7..3471b1b 100644
+--- a/lib/openuv380.cc
++++ b/lib/openuv380.cc
+@@ -1,5 +1,6 @@
+ #include "openuv380.hh"
+ #include "opengd77_limits.hh"
++#include "openuv380_satelliteconfig.hh"
+ #include "logger.hh"
+ #include "config.hh"
+ 
+@@ -7,7 +8,7 @@
+ OpenUV380::OpenUV380(OpenGD77Interface *device, QObject *parent)
+   : OpenGD77Base(device, parent), _name("Open MD-UV380"), _codeplug(), _callsigns()
+ {
+-  // pass...
++  _satelliteConfig = new OpenUV380SatelliteConfig(this);
+ }
+ 
+ 
+diff --git a/lib/openuv380_satelliteconfig.cc b/lib/openuv380_satelliteconfig.cc
+new file mode 100644
+index 0000000..c133b38
+--- /dev/null
++++ b/lib/openuv380_satelliteconfig.cc
+@@ -0,0 +1,21 @@
++#include "openuv380_satelliteconfig.hh"
++#include "errorstack.hh"
++
++
++OpenUV380SatelliteConfig::OpenUV380SatelliteConfig(QObject *parent)
++  : OpenGD77BaseSatelliteConfig(parent)
++{
++  image(FLASH).addElement(Offset::satellites(), 0x11a0);
++}
++
++
++bool
++OpenUV380SatelliteConfig::encode(SatelliteDatabase *db, const ErrorStack &err) {
++  SatelliteBankElement bank(data(Offset::satellites(), FLASH));
++  if (! bank.encode(db, err)) {
++    errMsg(err) << "Cannot encode satellite config for OpenUV380.";
++    return false;
++  }
++
++  return true;
++}
+diff --git a/lib/openuv380_satelliteconfig.hh b/lib/openuv380_satelliteconfig.hh
+new file mode 100644
+index 0000000..cc68766
+--- /dev/null
++++ b/lib/openuv380_satelliteconfig.hh
+@@ -0,0 +1,36 @@
++#ifndef OPENUV380_SATELLITECONFIG_HH
++#define OPENUV380_SATELLITECONFIG_HH
++
++#include "opengd77base_satelliteconfig.hh"
++
++
++class OpenUV380SatelliteConfig : public OpenGD77BaseSatelliteConfig
++{
++  Q_OBJECT
++
++public:
++  /** Default constructor. */
++  explicit OpenUV380SatelliteConfig(QObject *parent = nullptr);
++
++  /** Encodes the given satellite database. */
++  virtual bool encode(SatelliteDatabase *db, const ErrorStack &err=ErrorStack());
++
++public:
++  /** Some limits for the satellite config. */
++  struct Limit {
++    /** The maximum number of satellites. */
++    static constexpr unsigned int satellites() {
++      return OpenGD77BaseSatelliteConfig::SatelliteBankElement::Limit::satellites();
++    }
++  };
++
++protected:
++  /** Some internal offsets. */
++  struct Offset {
++    /// @cond DO_NOT_DOCUMENT
++    static constexpr unsigned int satellites()        { return 0x020000; }
++    /// @endcond
++  };
++};
++
++#endif // OPENUV380_SATELLITECONFIG_HH
+diff --git a/lib/radio.hh b/lib/radio.hh
+index c0d8434..70de603 100644
+--- a/lib/radio.hh
++++ b/lib/radio.hh
+@@ -35,11 +35,12 @@ class Radio : public QThread
+ public:
+   /** Possible states of the radio object. */
+ 	typedef enum {
+-    StatusIdle,            ///< Idle, nothing to do.
+-    StatusDownload,        ///< Downloading codeplug.
+-    StatusUpload,          ///< Uploading codeplug.
+-    StatusUploadCallsigns, ///< Uploading codeplug.
+-    StatusError            ///< An error occurred.
++    StatusIdle,             ///< Idle, nothing to do.
++    StatusDownload,         ///< Downloading codeplug.
++    StatusUpload,           ///< Uploading codeplug.
++    StatusUploadCallsigns,  ///< Uploading codeplug.
++    StatusUploadSatellites, ///< Uploading satellite config.
++    StatusError             ///< An error occurred.
+   } Status;
+ 
+ public:
+@@ -86,17 +87,23 @@ public slots:
+    * Once the download finished, the codeplug can be accessed and decoded using
+    * the @c codeplug() method. */
+   virtual bool startDownload(bool blocking=false, const ErrorStack &err=ErrorStack()) = 0;
++
+   /** Derives the device-specific codeplug from the generic configuration and uploads that
+    * codeplug to the radio. */
+   virtual bool startUpload(
+       Config *config, bool blocking=false,
+       const Codeplug::Flags &flags = Codeplug::Flags(), const ErrorStack &err=ErrorStack()) = 0;
++
+   /** Assembles the callsign DB from the given one and uploads it to the device. */
+   virtual bool startUploadCallsignDB(
+       UserDatabase *db, bool blocking=false,
+       const CallsignDB::Selection &selection=CallsignDB::Selection(),
+       const ErrorStack &err=ErrorStack()) = 0;
+ 
++  /** Assembles the satellite config and writes it to the device. */
++  virtual bool startUploadSatelliteConfig(
++      SatelliteDatabase *db, bool blocking=false, const ErrorStack &err=ErrorStack()) = 0;
++
+ signals:
+   /** Gets emitted once the codeplug download has been started. */
+ 	void downloadStarted();
+diff --git a/lib/radioddity_radio.cc b/lib/radioddity_radio.cc
+index 47c3357..514be55 100644
+--- a/lib/radioddity_radio.cc
++++ b/lib/radioddity_radio.cc
+@@ -76,6 +76,17 @@ RadioddityRadio::startUploadCallsignDB(UserDatabase *db, bool blocking, const Ca
+   return false;
+ }
+ 
++
++bool
++RadioddityRadio::startUploadSatelliteConfig(SatelliteDatabase *db, bool blocking, const ErrorStack &err) {
++  Q_UNUSED(db); Q_UNUSED(blocking);
++
++  errMsg(err) << "Satellite config upload is not implemented yet.";
++
++  return false;
++}
++
++
+ void
+ RadioddityRadio::run() {
+   if (StatusDownload == _task) {
+diff --git a/lib/radioddity_radio.hh b/lib/radioddity_radio.hh
+index 160cdc4..eb9ae33 100644
+--- a/lib/radioddity_radio.hh
++++ b/lib/radioddity_radio.hh
+@@ -32,6 +32,8 @@ public slots:
+   bool startUploadCallsignDB(UserDatabase *db, bool blocking=false,
+                              const CallsignDB::Selection &selection=CallsignDB::Selection(), const ErrorStack &err=ErrorStack());
+ 
++  bool startUploadSatelliteConfig(SatelliteDatabase *db, bool blocking, const ErrorStack &err);
++
+ protected:
+   /** Thread main routine, performs all blocking IO operations for codeplug up- and download. */
+ 	void run();
+diff --git a/lib/radiolimits.cc b/lib/radiolimits.cc
+index ecc63aa..b5aeff8 100644
+--- a/lib/radiolimits.cc
++++ b/lib/radiolimits.cc
+@@ -921,17 +921,22 @@ RadioLimitSingleZone::verifyItem(const ConfigItem *item, RadioLimitContext &cont
+  * Implementation of RadioLimits
+  * ********************************************************************************************* */
+ RadioLimits::RadioLimits(bool betaWarning, QObject *parent)
+-  : RadioLimitItem(parent), _betaWarning(betaWarning)
++  : RadioLimitItem(parent), _betaWarning(betaWarning),
++    _hasCallSignDB(false), _callSignDBImplemented(false), _numCallSignDBEntries(0),
++    _hasSatelliteConfig(false), _satelliteConfigImplemented(false), _numSatellites(0)
+ {
+   // pass...
+ }
+ 
+ RadioLimits::RadioLimits(const std::initializer_list<std::pair<QString, RadioLimitElement *> > &list, QObject *parent)
+-  : RadioLimitItem(list, parent)
++  : RadioLimitItem(list, parent),
++    _hasCallSignDB(false), _callSignDBImplemented(false), _numCallSignDBEntries(0),
++    _hasSatelliteConfig(false), _satelliteConfigImplemented(false), _numSatellites(0)
+ {
+   // pass...
+ }
+ 
++
+ bool
+ RadioLimits::hasCallSignDB() const {
+   return _hasCallSignDB;
+@@ -947,6 +952,23 @@ RadioLimits::numCallSignDBEntries() const {
+   return _numCallSignDBEntries;
+ }
+ 
++
++bool
++RadioLimits::hasSatelliteConfig() const {
++  return _hasSatelliteConfig;
++}
++
++bool
++RadioLimits::satelliteConfigImplemented() const {
++  return _satelliteConfigImplemented;
++}
++
++unsigned
++RadioLimits::numSatellites() const {
++  return _numSatellites;
++}
++
++
+ bool
+ RadioLimits::verifyConfig(const Config *config, RadioLimitContext &context) const {
+   if (_betaWarning) {
+diff --git a/lib/radiolimits.hh b/lib/radiolimits.hh
+index 43f8d7b..907160b 100644
+--- a/lib/radiolimits.hh
++++ b/lib/radiolimits.hh
+@@ -700,6 +700,13 @@ public:
+   /** Returns the maximum number of entries in the call-sign DB. */
+   unsigned numCallSignDBEntries() const;
+ 
++  /** Returns @c true if the radio supports satellite config. */
++  bool hasSatelliteConfig() const;
++  /** Returns @c true if satellite config is implemented. */
++  bool satelliteConfigImplemented() const;
++  /** Returns the maximum number of satellites. */
++  unsigned numSatellites() const;
++
+ protected:
+   /** If @c true, a warning is issued that the radio is still under development and not well
+    * tested yet. */
+@@ -710,6 +717,12 @@ protected:
+   bool _callSignDBImplemented;
+   /** Holds the number of possible call-sign DB entries. */
+   unsigned _numCallSignDBEntries;
++  /** If @c true, the radio supports satellite config. */
++  bool _hasSatelliteConfig;
++  /** If @c true, satellite config is implemented. */
++  bool _satelliteConfigImplemented;
++  /** Holds the number of possible satellites. */
++  unsigned _numSatellites;
+ };
+ 
+ #endif // RADIOLIMITS_HH
+diff --git a/lib/rd5r_limits.cc b/lib/rd5r_limits.cc
+index 303fa71..36c1467 100644
+--- a/lib/rd5r_limits.cc
++++ b/lib/rd5r_limits.cc
+@@ -17,6 +17,11 @@ RD5RLimits::RD5RLimits(QObject *parent)
+   _callSignDBImplemented  = false;
+   _numCallSignDBEntries   = 0;
+ 
++  // Define limits for satellite config
++  _hasSatelliteConfig          = false;
++  _satelliteConfigImplemented  = false;
++  _numSatellites               = 0;
++
+   /* Define limits for the general settings. */
+   add("settings",
+       new RadioLimitItem{
+diff --git a/lib/satelliteconfig.cc b/lib/satelliteconfig.cc
+new file mode 100644
+index 0000000..37fd29b
+--- /dev/null
++++ b/lib/satelliteconfig.cc
+@@ -0,0 +1,8 @@
++#include "satelliteconfig.hh"
++
++SatelliteConfig::SatelliteConfig(QObject *parent)
++  : DFUFile{parent}
++{
++  // pass...
++}
++
+diff --git a/lib/satelliteconfig.hh b/lib/satelliteconfig.hh
+new file mode 100644
+index 0000000..82870ea
+--- /dev/null
++++ b/lib/satelliteconfig.hh
+@@ -0,0 +1,27 @@
++#ifndef SATELLITECONFIG_HH
++#define SATELLITECONFIG_HH
++
++#include "dfufile.hh"
++
++
++// Forward declarations
++class SatelliteDatabase;
++
++
++/** Baseclass of all satellite database configurations.
++ * That is, the device specific encoding of the satellite orbitals and transponder information.
++ * @ingroup conf */
++class SatelliteConfig : public DFUFile
++{
++  Q_OBJECT
++
++protected:
++  /** Hidden constructor. */
++  explicit SatelliteConfig(QObject *parent = nullptr);
++
++public:
++  /** Encodes the given satellite db into the device specific satellite configuration. */
++  virtual bool encode(SatelliteDatabase *db, const ErrorStack &err=ErrorStack()) = 0;
++};
++
++#endif // SATELLITECONFIG_HH
+diff --git a/lib/satellitedatabase.cc b/lib/satellitedatabase.cc
+index 3f2cfe7..b038403 100644
+--- a/lib/satellitedatabase.cc
++++ b/lib/satellitedatabase.cc
+@@ -25,7 +25,7 @@ Satellite::Satellite()
+ }
+ 
+ Satellite::Satellite(const OrbitalElement &orbit)
+-  : OrbitalElement(orbit), _name(),
++  : OrbitalElement(orbit), _name(orbit.name()),
+     _fmUplink(), _fmDownlink(), _fmUplinkTone(), _fmDownlinkTone(),
+     _aprsUplink(), _aprsDownlink(), _aprsUplinkTone(), _aprsDownlinkTone(), _beacon()
+ {
+@@ -54,6 +54,7 @@ Satellite::setFMUplink(const Frequency &f) {
+   _fmUplink = f;
+ }
+ 
++
+ const Frequency &
+ Satellite::fmDownlink() const {
+   return _fmDownlink;
+@@ -70,11 +71,22 @@ Satellite::fmUplinkTone() const {
+   return _fmUplinkTone;
+ }
+ 
++void
++Satellite::setFMUplinkTone(const SelectiveCall &tone) {
++  _fmUplinkTone = tone;
++}
++
++
+ const SelectiveCall &
+ Satellite::fmDownlinkTone() const {
+   return _fmDownlinkTone;
+ }
+ 
++void
++Satellite::setFMDownlinkTone(const SelectiveCall &tone) {
++  _fmDownlinkTone = tone;
++}
++
+ 
+ const Frequency &
+ Satellite::aprsUplink() const {
+@@ -102,11 +114,21 @@ Satellite::aprsUplinkTone() const {
+   return _aprsUplinkTone;
+ }
+ 
++void
++Satellite::setAPRSUplinkTone(const SelectiveCall &tone) {
++  _aprsUplinkTone = tone;
++}
++
+ const SelectiveCall &
+ Satellite::aprsDownlinkTone() const {
+   return _aprsDownlinkTone;
+ }
+ 
++void
++Satellite::setAPRSDownlinkTone(const SelectiveCall &tone) {
++  _aprsDownlinkTone = tone;
++}
++
+ const Frequency &
+ Satellite::beacon() const {
+   return _beacon;
+@@ -302,10 +324,22 @@ Qt::ItemFlags
+ SatelliteDatabase::flags(const QModelIndex &index) const {
+   Qt::ItemFlags f = Qt::ItemIsSelectable | Qt::ItemIsEnabled | Qt::ItemNeverHasChildren;
+ 
++  // Name
++  if (1 == index.column())
++    f |= Qt::ItemIsEditable;
++  // FM up/downlink frequencies
+   if ((2 == index.column()) || (3 == index.column()))
+     f |= Qt::ItemIsEditable;
++  // FM up/downlink sub tones
++  if ((4 == index.column()) || (5 == index.column()))
++    f |= Qt::ItemIsEditable;
++  // APRS up/downlink frequencies
+   if ((6 == index.column()) || (7 == index.column()))
+     f |= Qt::ItemIsEditable;
++  // APRS up/downlink sub tones
++  if ((8 == index.column()) || (9 == index.column()))
++    f |= Qt::ItemIsEditable;
++  // Beacon
+   if (10 == index.column())
+     f |= Qt::ItemIsEditable;
+ 
+@@ -373,8 +407,12 @@ SatelliteDatabase::setData(const QModelIndex &index, const QVariant &value, int
+   case 1: _satellites[index.row()].setName(value.toString().simplified()); return true;
+   case 2: _satellites[index.row()].setFMDownlink(value.value<Frequency>()); return true;
+   case 3: _satellites[index.row()].setFMUplink(value.value<Frequency>()); return true;
++  case 4: _satellites[index.row()].setFMDownlinkTone(value.value<SelectiveCall>()); return true;
++  case 5: _satellites[index.row()].setFMUplinkTone(value.value<SelectiveCall>()); return true;
+   case 6: _satellites[index.row()].setAPRSDownlink(value.value<Frequency>()); return true;
+   case 7: _satellites[index.row()].setAPRSUplink(value.value<Frequency>()); return true;
++  case 8: _satellites[index.row()].setAPRSDownlinkTone(value.value<SelectiveCall>()); return true;
++  case 9: _satellites[index.row()].setAPRSUplinkTone(value.value<SelectiveCall>()); return true;
+   case 10: _satellites[index.row()].setBeacon(value.value<Frequency>()); return true;
+   }
+ 
+diff --git a/lib/satellitedatabase.hh b/lib/satellitedatabase.hh
+index 95b7349..25d8e7a 100644
+--- a/lib/satellitedatabase.hh
++++ b/lib/satellitedatabase.hh
+@@ -41,8 +41,12 @@ public:
+   void setFMDownlink(const Frequency &f);
+   /** Returns the FM uplink tone (i.e., TX tone). */
+   const SelectiveCall &fmUplinkTone() const;
++  /** Sets the FM uplink sub tone. */
++  void setFMUplinkTone(const SelectiveCall &tone);
+   /** Returns the FM downlink tone (i.e., RX tone). */
+   const SelectiveCall &fmDownlinkTone() const;
++  /** Sets the FM downlink sub tone. */
++  void setFMDownlinkTone(const SelectiveCall &tone);
+ 
+   /** Returns the APRS uplink frequency. */
+   const Frequency &aprsUplink() const;
+@@ -54,9 +58,12 @@ public:
+   void setAPRSDownlink(const Frequency &f);
+   /** Returns the APRS uplink tone (i.e., TX tone). */
+   const SelectiveCall &aprsUplinkTone() const;
++  /** Sets the APRS uplink sub tone. */
++  void setAPRSUplinkTone(const SelectiveCall &tone);
+   /** Returns the APRS downlink tone (i.e., RX tone). */
+   const SelectiveCall &aprsDownlinkTone() const;
+-
++  /** Sets the APRS downlink sub tone. */
++  void setAPRSDownlinkTone(const SelectiveCall &tone);
+   /** Returns a beacon frequency. */
+   const Frequency &beacon() const;
+   /** Sets a beacon frequency. */
+diff --git a/lib/tyt_radio.cc b/lib/tyt_radio.cc
+index 7fd1937..8a064dc 100644
+--- a/lib/tyt_radio.cc
++++ b/lib/tyt_radio.cc
+@@ -91,6 +91,14 @@ TyTRadio::startUploadCallsignDB(UserDatabase *db, bool blocking, const CallsignD
+   return true;
+ }
+ 
++
++bool
++TyTRadio::startUploadSatelliteConfig(SatelliteDatabase *db, bool blocking, const ErrorStack &err) {
++  errMsg(err) << "Satellite config upload is not implemented yet.";
++  return false;
++}
++
++
+ void
+ TyTRadio::run() {
+   if (StatusDownload == _task) {
+diff --git a/lib/tyt_radio.hh b/lib/tyt_radio.hh
+index 72b7104..a1e9d12 100644
+--- a/lib/tyt_radio.hh
++++ b/lib/tyt_radio.hh
+@@ -34,6 +34,8 @@ public slots:
+                              const CallsignDB::Selection &selection=CallsignDB::Selection(),
+                              const ErrorStack &err=ErrorStack());
+ 
++  bool startUploadSatelliteConfig(SatelliteDatabase *db, bool blocking, const ErrorStack &err);
++
+ protected:
+   /** Thread main routine, performs all blocking IO operations for codeplug up- and download. */
+ 	void run();
+diff --git a/lib/uv390_limits.cc b/lib/uv390_limits.cc
+index 6db34a3..4d058ba 100644
+--- a/lib/uv390_limits.cc
++++ b/lib/uv390_limits.cc
+@@ -18,6 +18,11 @@ UV390Limits::UV390Limits(QObject *parent)
+   _callSignDBImplemented  = true;
+   _numCallSignDBEntries   = 122197;
+ 
++  // Define limits for satellite config
++  _hasSatelliteConfig          = false;
++  _satelliteConfigImplemented  = false;
++  _numSatellites               = 0;
++
+   add("settings", new RadioLimitItem {
+         { "introLine1", new RadioLimitString(-1, 10, RadioLimitString::Unicode) },
+         { "introLine2", new RadioLimitString(-1, 10, RadioLimitString::Unicode) },
+diff --git a/src/analogchanneldialog.ui b/src/analogchanneldialog.ui
+index b29ddd8..4e6bbca 100644
+--- a/src/analogchanneldialog.ui
++++ b/src/analogchanneldialog.ui
+@@ -236,6 +236,12 @@
+          </item>
+          <item row="0" column="1">
+           <widget class="QComboBox" name="txAdmit">
++           <property name="sizePolicy">
++            <sizepolicy hsizetype="MinimumExpanding" vsizetype="Fixed">
++             <horstretch>0</horstretch>
++             <verstretch>0</verstretch>
++            </sizepolicy>
++           </property>
+            <item>
+             <property name="text">
+              <string>Always</string>
+@@ -309,6 +315,12 @@
+           <layout class="QHBoxLayout" name="horizontalLayout_9">
+            <item>
+             <widget class="QSpinBox" name="squelchValue">
++             <property name="sizePolicy">
++              <sizepolicy hsizetype="MinimumExpanding" vsizetype="Fixed">
++               <horstretch>0</horstretch>
++               <verstretch>0</verstretch>
++              </sizepolicy>
++             </property>
+              <property name="specialValueText">
+               <string>Open</string>
+              </property>
+@@ -329,7 +341,7 @@
+          <item row="2" column="1">
+           <widget class="SelectiveCallBox" name="rxTone" native="true">
+            <property name="sizePolicy">
+-            <sizepolicy hsizetype="MinimumExpanding" vsizetype="Preferred">
++            <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+@@ -339,7 +351,7 @@
+          <item row="3" column="1">
+           <widget class="SelectiveCallBox" name="txTone" native="true">
+            <property name="sizePolicy">
+-            <sizepolicy hsizetype="MinimumExpanding" vsizetype="Preferred">
++            <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+diff --git a/src/application.cc b/src/application.cc
+index 605dea2..32b1cc5 100644
+--- a/src/application.cc
++++ b/src/application.cc
+@@ -734,7 +734,50 @@ Application::uploadCallsignDB() {
+ 
+ void
+ Application::uploadSatellites() {
++  // Start upload satellites
++  Radio *radio = autoDetect();
++  if (nullptr == radio) {
++    QMessageBox::warning(nullptr, tr("No radio found"),
++                         tr("No matching device was found."));
++    return;
++  }
+ 
++  if (! radio->limits().hasSatelliteConfig()) {
++    logDebug() << "Radio " << radio->name() << " does not support satellite tracking.";
++    QMessageBox::information(nullptr, tr("Cannot write satellite config."),
++                             tr("The detected radio '%1' does not support satellite tracking.")
++                             .arg(radio->name()));
++    radio->deleteLater();
++    return;
++  }
++
++  if (! radio->limits().satelliteConfigImplemented()) {
++    logDebug() << "Radio " << radio->name()
++               << " does support satellite tracking but it is not implemented yet.";
++    QMessageBox::critical(nullptr, tr("Cannot write satellite config."),
++                          tr("The detected radio '%1' does support satellite tracking. "
++                             "This feature, however, is not implemented yet.").arg(radio->name()));
++    radio->deleteLater();
++    return;
++  }
++
++  QProgressBar *progress = _mainWindow->findChild<QProgressBar *>("progress");
++  progress->setRange(0, 100); progress->setValue(0);
++  progress->setVisible(true);
++
++  connect(radio, SIGNAL(uploadProgress(int)), progress, SLOT(setValue(int)));
++  connect(radio, SIGNAL(uploadError(Radio *)), this, SLOT(onCodeplugUploadError(Radio *)));
++  connect(radio, SIGNAL(uploadComplete(Radio *)), this, SLOT(onCodeplugUploaded(Radio *)));
++
++  ErrorStack err;
++  if (radio->startUploadSatelliteConfig(_satellites, false, err)) {
++    logDebug() << "Start satellite config write...";
++    _mainWindow->statusBar()->showMessage(tr("Write satellite config ..."));
++    _mainWindow->setEnabled(false);
++  } else {
++    ErrorMessageView(err).exec();
++    progress->setVisible(false);
++  }
+ }
+ 
+ void
+diff --git a/src/mainwindow.cc b/src/mainwindow.cc
+index d1230b7..aead3de 100644
+--- a/src/mainwindow.cc
++++ b/src/mainwindow.cc
+@@ -38,6 +38,8 @@ MainWindow::MainWindow(Config *config, QWidget *parent)
+   ui->statusbar->addPermanentWidget(progress);
+   progress->setVisible(false);
+ 
++  ui->actionWriteSatellites->setIcon(QIcon::fromTheme("device-write-satellite"));
++
+   connect(ui->actionNewCodeplug, SIGNAL(triggered()), app, SLOT(newCodeplug()));
+   connect(ui->actionOpenCodeplug, SIGNAL(triggered()), app, SLOT(loadCodeplug()));
+   connect(ui->actionSaveCodeplug, SIGNAL(triggered()), app, SLOT(saveCodeplug()));
+@@ -58,6 +60,7 @@ MainWindow::MainWindow(Config *config, QWidget *parent)
+   connect(ui->actionDownload, SIGNAL(triggered()), app, SLOT(downloadCodeplug()));
+   connect(ui->actionUpload, SIGNAL(triggered()), app, SLOT(uploadCodeplug()));
+   connect(ui->actionUploadCallsignDB, SIGNAL(triggered()), app, SLOT(uploadCallsignDB()));
++  connect(ui->actionWriteSatellites, SIGNAL(triggered()), app, SLOT(uploadSatellites()));
+ 
+   // Wire-up "General Settings" view
+   _generalSettings = new GeneralSettingsView(config);
+diff --git a/src/mainwindow.ui b/src/mainwindow.ui
+index cb4d3cf..0d4d211 100644
+--- a/src/mainwindow.ui
++++ b/src/mainwindow.ui
+@@ -67,7 +67,7 @@
+      <x>0</x>
+      <y>0</y>
+      <width>800</width>
+-     <height>19</height>
++     <height>22</height>
+     </rect>
+    </property>
+    <widget class="QMenu" name="menuFile">
+@@ -355,7 +355,7 @@
+     <string>Refreshes the orbital elements.</string>
+    </property>
+    <property name="visible">
+-    <bool>false</bool>
++    <bool>true</bool>
+    </property>
+   </action>
+   <action name="actionEditSatellites">
+@@ -366,7 +366,7 @@
+     <string>Opens an editor to edit your satellite database.</string>
+    </property>
+    <property name="visible">
+-    <bool>false</bool>
++    <bool>true</bool>
+    </property>
+   </action>
+   <action name="actionWriteSatellites">
+@@ -377,7 +377,7 @@
+     <string>Writes the orbital elements and transponder information onto the connected device.</string>
+    </property>
+    <property name="visible">
+-    <bool>false</bool>
++    <bool>true</bool>
+    </property>
+   </action>
+  </widget>
+diff --git a/src/satellitedatabasedialog.cc b/src/satellitedatabasedialog.cc
+index 1c4c295..84b4936 100644
+--- a/src/satellitedatabasedialog.cc
++++ b/src/satellitedatabasedialog.cc
+@@ -4,6 +4,7 @@
+ #include "satelliteselectiondialog.hh"
+ #include "transponderfrequencydelegate.hh"
+ #include "settings.hh"
++#include "selectivecallbox.hh"
+ 
+ 
+ SatelliteDatabaseDialog::SatelliteDatabaseDialog(SatelliteDatabase *db, QWidget *parent) :
+@@ -16,16 +17,24 @@ SatelliteDatabaseDialog::SatelliteDatabaseDialog(SatelliteDatabase *db, QWidget
+ 
+   ui->satellitesView->setModel(_database);
+ 
+-  ui->satellitesView->setItemDelegateForColumn(
+-        2, new TransponderFrequencyDelegate(false, Transponder::Mode::FM));
+-  ui->satellitesView->setItemDelegateForColumn(
+-        3, new TransponderFrequencyDelegate(true, Transponder::Mode::FM));
+-  ui->satellitesView->setItemDelegateForColumn(
+-        6, new TransponderFrequencyDelegate(false, Transponder::Mode::APRS));
+-  ui->satellitesView->setItemDelegateForColumn(
+-        7, new TransponderFrequencyDelegate(true, Transponder::Mode::APRS));
+-  ui->satellitesView->setItemDelegateForColumn(
+-        10, new TransponderFrequencyDelegate(false, Transponder::Mode::CW));
++  // FM downlink
++  ui->satellitesView->setItemDelegateForColumn(2, new TransponderFrequencyDelegate(false, Transponder::Mode::FM));
++  // FM uplink
++  ui->satellitesView->setItemDelegateForColumn(3, new TransponderFrequencyDelegate(true, Transponder::Mode::FM));
++  // FM downlink sub tone
++  ui->satellitesView->setItemDelegateForColumn(4, new SelectiveCallDelegate());
++  // FM uplink sub tone
++  ui->satellitesView->setItemDelegateForColumn(5, new SelectiveCallDelegate());
++  // APRS downlink
++  ui->satellitesView->setItemDelegateForColumn(6, new TransponderFrequencyDelegate(false, Transponder::Mode::APRS));
++  // APRS uplink
++  ui->satellitesView->setItemDelegateForColumn(7, new TransponderFrequencyDelegate(true, Transponder::Mode::APRS));
++  // APRS downlink sub tone
++  ui->satellitesView->setItemDelegateForColumn(8, new SelectiveCallDelegate());
++  // APRS uplink sub tone
++  ui->satellitesView->setItemDelegateForColumn(9, new SelectiveCallDelegate());
++  // Beacon
++  ui->satellitesView->setItemDelegateForColumn(10, new TransponderFrequencyDelegate(false, Transponder::Mode::CW));
+ 
+   this->restoreGeometry(Settings().headerState(objectName()));
+   ui->satellitesView->horizontalHeader()->restoreState(
+diff --git a/src/satelliteselectiondialog.cc b/src/satelliteselectiondialog.cc
+index 2361d79..75c851b 100644
+--- a/src/satelliteselectiondialog.cc
++++ b/src/satelliteselectiondialog.cc
+@@ -3,6 +3,7 @@
+ #include "orbitalelementsdatabase.hh"
+ #include "logger.hh"
+ #include "settings.hh"
++#include "searchpopup.hh"
+ 
+ 
+ SatelliteSelectionDialog::SatelliteSelectionDialog(OrbitalElementsDatabase *db, QWidget *parent)
+@@ -11,6 +12,7 @@ SatelliteSelectionDialog::SatelliteSelectionDialog(OrbitalElementsDatabase *db,
+   ui->setupUi(this);
+   ui->satellites->setModel(_database);
+   ui->satellites->setModelColumn(1);
++  SearchPopup::attach(ui->satellites);
+   this->restoreGeometry(Settings().headerState(objectName()));
+ }
+ 
+diff --git a/src/searchpopup.cc b/src/searchpopup.cc
+index 0300a15..3ab5fdd 100644
+--- a/src/searchpopup.cc
++++ b/src/searchpopup.cc
+@@ -46,17 +46,15 @@ SearchPopup::SearchPopup(QAbstractItemView *parent)
+   layout->addWidget(close);
+   setLayout(layout);
+ 
++  move(parent->mapToGlobal(QPoint(parent->width()-width()-5, parent->height()-height()+5)));
+   this->hide();
+ }
+ 
+ void
+ SearchPopup::showPopup() {
+   show();
+-  QAbstractItemView *itemView = qobject_cast<QAbstractItemView *>(parent());
+-  QPoint parentPos = itemView->mapToGlobal(itemView->pos());
+-  int x = parentPos.x();
+-  int y = parentPos.y()+itemView->height()-height();
+-  move(x,y);
++  auto itemView = qobject_cast<QAbstractItemView *>(parent());
++  move(itemView->mapToGlobal(QPoint(itemView->width()-width()-5, itemView->height()-height()+5)));
+   _search->clear();
+   _search->setFocus();
+ }
+diff --git a/src/selectivecallbox.cc b/src/selectivecallbox.cc
+index b926625..46dba95 100644
+--- a/src/selectivecallbox.cc
++++ b/src/selectivecallbox.cc
+@@ -4,6 +4,10 @@
+ #include <QHBoxLayout>
+ #include <QLabel>
+ 
++
++/* ********************************************************************************************* *
++ * SelectiveCallBox
++ * ********************************************************************************************* */
+ SelectiveCallBox::SelectiveCallBox(QWidget *parent)
+   : QWidget{parent}, _typeSelection(nullptr), _stack(nullptr), _ctcss(nullptr), _dcs(nullptr),
+     _inverted(nullptr)
+@@ -14,20 +18,29 @@ SelectiveCallBox::SelectiveCallBox(QWidget *parent)
+   _typeSelection->addItem(tr("DCS"));
+ 
+   _stack = new QStackedWidget();
++  _stack->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
++  _stack->setContentsMargins(0,0,0,0);
+   auto emptyLayout = new QHBoxLayout();
++  emptyLayout->setContentsMargins(0,0,0,0);
+   auto emptyLabel = new QLabel("None");
++  emptyLabel->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
+   emptyLayout->addWidget(emptyLabel);
+   auto emptyWidget = new QWidget();
+   emptyWidget->setLayout(emptyLayout);
++  emptyWidget->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
++  emptyWidget->setContentsMargins(0,0,0,0);
+   _stack->addWidget(emptyWidget);
+ 
+   // CTCSS settings
+   _ctcss = new QComboBox();
+   _ctcss->setEditable(true);
+   auto ctcssLayout = new QHBoxLayout();
++  ctcssLayout->setContentsMargins(0,0,0,0);
+   ctcssLayout->addWidget(_ctcss);
+   ctcssLayout->addWidget(new QLabel(tr("Hz")));
+   auto ctcssWidget = new QWidget();
++  ctcssWidget->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
++  ctcssWidget->setContentsMargins(0,0,0,0);
+   ctcssWidget->setLayout(ctcssLayout);
+   _stack->addWidget(ctcssWidget);
+ 
+@@ -36,10 +49,13 @@ SelectiveCallBox::SelectiveCallBox(QWidget *parent)
+   _dcs->setEditable(true);
+   _inverted = new QCheckBox(tr("Inverted"));
+   auto dscLayout = new QHBoxLayout();
++  dscLayout->setContentsMargins(0,0,0,0);
+   dscLayout->addWidget(_dcs);
+   dscLayout->addWidget(_inverted);
+   auto dcsWidget = new QWidget();
+   dcsWidget->setLayout(dscLayout);
++  dcsWidget->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
++  dcsWidget->setContentsMargins(0,0,0,0);
+   _stack->addWidget(dcsWidget);
+ 
+   connect(_typeSelection, &QComboBox::currentTextChanged, [=]() {
+@@ -60,8 +76,9 @@ SelectiveCallBox::SelectiveCallBox(QWidget *parent)
+   auto layout = new QHBoxLayout();
+   layout->addWidget(_typeSelection,0);
+   layout->addWidget(_stack, 1);
+-
+-  setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Minimum);
++  layout->setContentsMargins(0,0,0,0);
++  setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
++  setContentsMargins(0,0,0,0);
+   setLayout(layout);
+ }
+ 
+@@ -106,3 +123,41 @@ SelectiveCallBox::selectiveCall() const {
+ 
+   return SelectiveCall();
+ }
++
++
++/* ********************************************************************************************* *
++ * SelectiveCallDelegate
++ * ********************************************************************************************* */
++SelectiveCallDelegate::SelectiveCallDelegate(QObject *parent)
++  : QStyledItemDelegate(parent)
++{
++  // pass...
++}
++
++
++QWidget *
++SelectiveCallDelegate::createEditor(
++    QWidget *parent, const QStyleOptionViewItem &option, const QModelIndex &index) const
++{
++  Q_UNUSED(option); Q_UNUSED(index);
++  auto seditor = new SelectiveCallBox(parent);
++  seditor->setSelectiveCall(index.data(Qt::EditRole).value<SelectiveCall>());
++  return seditor;
++}
++
++
++void
++SelectiveCallDelegate::setEditorData(QWidget *editor, const QModelIndex index) {
++  auto seditor = qobject_cast<SelectiveCallBox*>(editor);
++  seditor->setSelectiveCall(index.data(Qt::EditRole).value<SelectiveCall>());
++}
++
++
++void
++SelectiveCallDelegate::setModelData(
++    QWidget *editor, QAbstractItemModel *model, const QModelIndex &index) const
++{
++  auto seditor = qobject_cast<SelectiveCallBox*>(editor);
++  model->setData(index, QVariant::fromValue(seditor->selectiveCall()));
++}
++
+diff --git a/src/selectivecallbox.hh b/src/selectivecallbox.hh
+index 95b8ad5..f9bf9fc 100644
+--- a/src/selectivecallbox.hh
++++ b/src/selectivecallbox.hh
+@@ -6,6 +6,7 @@
+ #include <QComboBox>
+ #include <QCheckBox>
+ #include <QStackedWidget>
++#include <QStyledItemDelegate>
+ 
+ 
+ class SelectiveCallBox : public QWidget
+@@ -29,4 +30,18 @@ private:
+   QCheckBox *_inverted;
+ };
+ 
++
++class SelectiveCallDelegate: public QStyledItemDelegate
++{
++  Q_OBJECT
++
++public:
++  explicit SelectiveCallDelegate(QObject *parent=nullptr);
++
++  QWidget *createEditor(QWidget *parent, const QStyleOptionViewItem &option, const QModelIndex &index) const;
++  void setEditorData(QWidget *editor, const QModelIndex index);
++  void setModelData(QWidget *editor, QAbstractItemModel *model, const QModelIndex &index) const;
++};
++
++
+ #endif // SELECTIVECALLBOX_H
+-- 
+2.49.0
+

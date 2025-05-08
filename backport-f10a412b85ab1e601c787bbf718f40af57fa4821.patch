@@ -1,0 +1,255 @@
+From f10a412b85ab1e601c787bbf718f40af57fa4821 Mon Sep 17 00:00:00 2001
+From: Hannes Matuschek <hmatuschek@gmail.com>
+Date: Sun, 23 Feb 2025 14:03:53 +0100
+Subject: [PATCH] Added channel extension, implemented TX CC encoding.
+ Addresses #561. (#569)
+
+---
+ lib/d878uv_codeplug.cc | 118 +++++++++++++++++++++++++++++++++++++----
+ lib/d878uv_codeplug.hh |  58 ++++++++++++++++++++
+ 2 files changed, 166 insertions(+), 10 deletions(-)
+
+diff --git a/lib/d878uv_codeplug.cc b/lib/d878uv_codeplug.cc
+index 610d0cc..dc54682 100644
+--- a/lib/d878uv_codeplug.cc
++++ b/lib/d878uv_codeplug.cc
+@@ -314,6 +314,89 @@ D878UVCodeplug::ChannelElement::fromChannelObj(const Channel *c, Context &ctx) {
+ }
+ 
+ 
++
++/* ******************************************************************************************** *
++ * Implementation of D878UVCodeplug::ChannelExtensionElement
++ * ******************************************************************************************** */
++D878UVCodeplug::ChannelExtensionElement::ChannelExtensionElement(uint8_t *ptr, size_t size)
++  : Element(ptr, size)
++{
++  // pass...
++}
++
++D878UVCodeplug::ChannelExtensionElement::ChannelExtensionElement(uint8_t *ptr)
++  : Element(ptr, size())
++{
++  /// pass...
++}
++
++
++void
++D878UVCodeplug::ChannelExtensionElement::clear() {
++  Element::clear();
++  memset(_data, 0, size());
++}
++
++
++unsigned int
++D878UVCodeplug::ChannelExtensionElement::bot5ToneIDIndex() const {
++  return getUInt8(Offset::bot5ToneIDIndex());
++}
++
++void
++D878UVCodeplug::ChannelExtensionElement::setBOT5ToneIDIndex(unsigned int idx) {
++  setUInt8(Offset::bot5ToneIDIndex(), idx);
++}
++
++
++unsigned int
++D878UVCodeplug::ChannelExtensionElement::eot5ToneIDIndex() const {
++  return getUInt8(Offset::eot5ToneIDIndex());
++}
++
++void
++D878UVCodeplug::ChannelExtensionElement::setEOT5ToneIDIndex(unsigned int idx) {
++  setUInt8(Offset::eot5ToneIDIndex(), idx);
++}
++
++
++unsigned int
++D878UVCodeplug::ChannelExtensionElement::txColorCode() const {
++  return getUInt8(Offset::txColorCode());
++}
++
++void
++D878UVCodeplug::ChannelExtensionElement::setTXColorCode(unsigned int cc) {
++  setUInt8(Offset::txColorCode(), cc);
++}
++
++
++bool
++D878UVCodeplug::ChannelExtensionElement::updateChannelObj(Channel *c, Context &ctx) const {
++  Q_UNUSED(c); Q_UNUSED(ctx);
++  return true;
++}
++
++bool
++D878UVCodeplug::ChannelExtensionElement::linkChannelObj(Channel *c, Context &ctx) const {
++  Q_UNUSED(c); Q_UNUSED(ctx);
++  return true;
++}
++
++bool
++D878UVCodeplug::ChannelExtensionElement::fromChannelObj(const Channel *c, Context &ctx) {
++  Q_UNUSED(ctx);
++
++  if (c->is<DMRChannel>()) {
++    auto dmr = c->as<DMRChannel>();
++    setTXColorCode(dmr->colorCode());
++  }
++
++  return true;
++}
++
++
++
+ /* ******************************************************************************************** *
+  * Implementation of D878UVCodeplug::FMAPRSFrequencyNamesElement
+  * ******************************************************************************************** */
+@@ -3476,9 +3559,9 @@ D878UVCodeplug::allocateChannels() {
+     if (!isAllocated(addr, 0)) {
+       image(0).addElement(addr, ChannelElement::size());
+     }
+-    if (!isAllocated(addr+0x2000, 0)) {
+-      image(0).addElement(addr+0x2000, ChannelElement::size());
+-      memset(data(addr+0x2000), 0x00, ChannelElement::size());
++    if (!isAllocated(addr+Offset::toChannelExtension(), 0)) {
++      image(0).addElement(addr+Offset::toChannelExtension(), ChannelElement::size());
++      memset(data(addr+Offset::toChannelExtension()), 0x00, ChannelElement::size());
+     }
+   }
+ }
+@@ -3490,9 +3573,13 @@ D878UVCodeplug::encodeChannels(const Flags &flags, Context &ctx, const ErrorStac
+   for (int i=0; i<ctx.config()->channelList()->count(); i++) {
+     // enable channel
+     uint16_t bank = i/Limit::channelsPerBank(), idx = i%Limit::channelsPerBank();
+-    ChannelElement ch(data(Offset::channelBanks() + bank*Offset::betweenChannelBanks()
+-                           + idx*ChannelElement::size()));
++    uint32_t addr = Offset::channelBanks() + bank*Offset::betweenChannelBanks()
++        + idx*ChannelElement::size();
++
++    ChannelElement ch(data(addr));
+     ch.fromChannelObj(ctx.config()->channelList()->channel(i), ctx);
++    ChannelExtensionElement ext(data(addr + Offset::toChannelExtension()));
++    ext.fromChannelObj(ctx.config()->channelList()->channel(i), ctx);
+   }
+   return true;
+ }
+@@ -3506,12 +3593,18 @@ D878UVCodeplug::createChannels(Context &ctx, const ErrorStack &err) {
+   for (uint16_t i=0; i<Limit::numChannels(); i++) {
+     // Check if channel is enabled:
+     uint16_t bank = i/Limit::channelsPerBank(), idx = i%Limit::channelsPerBank();
++    uint32_t addr = Offset::channelBanks() + bank*Offset::betweenChannelBanks()
++        + idx*ChannelElement::size();
++
+     if (! channel_bitmap.isEncoded(i))
+       continue;
+-    ChannelElement ch(data(Offset::channelBanks() + bank*Offset::betweenChannelBanks()
+-                           + idx*ChannelElement::size()));
++
++    ChannelElement ch(data(addr));
++    ChannelExtensionElement ext(data(addr + Offset::toChannelExtension()));
++
+     if (Channel *obj = ch.toChannelObj(ctx)) {
+       ctx.config()->channelList()->add(obj); ctx.add(obj, i);
++      ext.updateChannelObj(obj, ctx);
+     }
+   }
+   return true;
+@@ -3526,12 +3619,17 @@ D878UVCodeplug::linkChannels(Context &ctx, const ErrorStack &err) {
+   for (uint16_t i=0; i<Limit::numChannels(); i++) {
+     // Check if channel is enabled:
+     uint16_t bank = i/Limit::channelsPerBank(), idx = i%Limit::channelsPerBank();
++    uint32_t addr = Offset::channelBanks() + bank*Offset::betweenChannelBanks()
++        + idx*ChannelElement::size();
+     if (! channel_bitmap.isEncoded(i))
+       continue;
+-    ChannelElement ch(data(Offset::channelBanks() + bank*Offset::betweenChannelBanks()
+-                           + idx*ChannelElement::size()));
+-    if (ctx.has<Channel>(i))
++    ChannelElement ch(data(addr));
++    ChannelExtensionElement ext(data(addr));
++
++    if (ctx.has<Channel>(i)) {
+       ch.linkChannelObj(ctx.get<Channel>(i), ctx);
++      ext.linkChannelObj(ctx.get<Channel>(i), ctx);
++    }
+   }
+   return true;
+ }
+diff --git a/lib/d878uv_codeplug.hh b/lib/d878uv_codeplug.hh
+index 0abe430..3a6a3b3 100644
+--- a/lib/d878uv_codeplug.hh
++++ b/lib/d878uv_codeplug.hh
+@@ -373,6 +373,63 @@ public:
+     };
+   };
+ 
++
++  /** Starting from AT-D878UV, all AnyTone devices encode an channel settings extension element
++   * at an offset 0x2000 to the original channel. Also the size of the extension element is
++   * identical to the channel element itself. This is weird. Anyway. This class encodes/decodes
++   * these settings.
++   *
++   * This implementation is compatible with firmware version 3.06 */
++  class ChannelExtensionElement: public Codeplug::Element
++  {
++  protected:
++    /** Hidden constructor. */
++    ChannelExtensionElement(uint8_t *ptr, size_t size);
++
++  public:
++    /** Default constructor. */
++    ChannelExtensionElement(uint8_t *ptr);
++
++    /** The size of the element. */
++    static constexpr unsigned int size() { return ChannelElement::size(); }
++
++    /** Resets the channel extension. */
++    void clear();
++
++    /** Returns the BOT 5-tone ID index. */
++    virtual unsigned int bot5ToneIDIndex() const;
++    /** Sets the BOT 5-tone ID index. */
++    virtual void setBOT5ToneIDIndex(unsigned int idx);
++
++    /** Returns the EOT 5-tone ID index. */
++    virtual unsigned int eot5ToneIDIndex() const;
++    /** Sets the EOT 5-tone ID index. */
++    virtual void setEOT5ToneIDIndex(unsigned int idx);
++
++    /** Returns the transmit color code. */
++    virtual unsigned int txColorCode() const;
++    /** Sets the transmit color code. */
++    virtual void setTXColorCode(unsigned int cc);
++
++    /** Constructs a Channel object from this element. */
++    virtual bool updateChannelObj(Channel *c, Context &ctx) const;
++    /** Links a previously created channel object. */
++    virtual bool linkChannelObj(Channel *c, Context &ctx) const;
++    /** Encodes the given channel object. */
++    virtual bool fromChannelObj(const Channel *c, Context &ctx);
++
++  protected:
++    /** Some internal used offsets. */
++    struct Offset: public Element::Offset {
++      /// @cond DO_NOT_DOCUMENT
++      static constexpr unsigned int bot5ToneIDIndex() { return 0x0000; }
++      static constexpr unsigned int eot5ToneIDIndex() { return 0x0001; }
++      static constexpr unsigned int txColorCode()     { return 0x0003; }
++      /// @endcond
++    };
++  };
++
++
+   /** Represents the general config of the radio within the D878UV binary codeplug.
+    *
+    * This class implements only the differences to the generic
+@@ -1935,6 +1992,7 @@ protected:
+   /** Internal offsets within the codeplug. */
+   struct Offset: public D868UVCodeplug::Offset {
+     /// @cond DO_NOT_DOCUMENT
++    static constexpr unsigned int toChannelExtension()          { return 0x00002000; }
+     static constexpr unsigned int settingsExtension()           { return 0x02501400; }
+     static constexpr unsigned int aprsSettings()                { return 0x02501000; }
+     static constexpr unsigned int analogAPRSMessage()           { return 0x02501200; }
+-- 
+2.49.0
+

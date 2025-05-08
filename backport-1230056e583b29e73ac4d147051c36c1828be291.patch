@@ -1,0 +1,557 @@
+From 1230056e583b29e73ac4d147051c36c1828be291 Mon Sep 17 00:00:00 2001
+From: Hannes Matuschek <hmatuschek@gmail.com>
+Date: Fri, 24 Jan 2025 23:47:02 +0100
+Subject: [PATCH] Fixed encoding of APRS settings (#558)
+
+* Added regression test.
+* Added unknown data to APRS settings.
+* Fixed resetting APRS settings defaults.
+* Added OpenGD77 extension for APRS settings.
+* Fixed en/decoding of locators.
+---
+ lib/gpssystem.cc             |  23 +++++++-
+ lib/gpssystem.hh             |  10 ++++
+ lib/opengd77_extension.cc    |  49 ++++++++++++++++-
+ lib/opengd77_extension.hh    |  29 ++++++++++
+ lib/opengd77base_codeplug.cc |  19 +++++++
+ lib/opengd77base_codeplug.hh |   2 +
+ lib/utils.cc                 | 101 ++++++++++++++++++++++++++++-------
+ lib/utils.hh                 |   2 +-
+ test/opengd77_test.cc        |  30 +++++++++--
+ test/opengd77_test.hh        |   2 +
+ test/utilstest.cc            |  22 ++++++++
+ test/utilstest.hh            |   1 +
+ 12 files changed, 262 insertions(+), 28 deletions(-)
+
+diff --git a/lib/gpssystem.cc b/lib/gpssystem.cc
+index e0409cf..2d6fa51 100644
+--- a/lib/gpssystem.cc
++++ b/lib/gpssystem.cc
+@@ -195,7 +195,8 @@ GPSSystem::serialize(const Context &context, const ErrorStack &err) {
+  * ********************************************************************************************* */
+ APRSSystem::APRSSystem(QObject *parent)
+   : PositioningSystem(parent), _channel(), _destination(), _destSSID(0),
+-    _source(), _srcSSID(0), _path(), _icon(Icon::None), _message(), _anytone(nullptr)
++    _source(), _srcSSID(0), _path(), _icon(Icon::None), _message(),
++    _anytone(nullptr), _openGD77(nullptr)
+ {
+   // Connect to channel reference
+   connect(&_channel, SIGNAL(modified()), this, SLOT(onReferenceModified()));
+@@ -205,7 +206,8 @@ APRSSystem::APRSSystem(const QString &name, FMChannel *channel, const QString &d
+                        const QString &src, unsigned srcSSID, const QString &path, Icon icon, const QString &message,
+                        unsigned period, QObject *parent)
+   : PositioningSystem(name, period, parent), _channel(), _destination(dest), _destSSID(destSSID),
+-    _source(src), _srcSSID(srcSSID), _path(path), _icon(icon), _message(message), _anytone(nullptr)
++    _source(src), _srcSSID(srcSSID), _path(path), _icon(icon), _message(message),
++    _anytone(nullptr), _openGD77(nullptr)
+ {
+   // Set channel reference
+   _channel.set(channel);
+@@ -361,6 +363,23 @@ APRSSystem::setAnytoneExtension(AnytoneFMAPRSSettingsExtension *ext) {
+   }
+ }
+ 
++OpenGD77APRSSystemExtension *
++APRSSystem::openGD77Extension() const {
++  return _openGD77;
++}
++void
++APRSSystem::setOpenGD77Extension(OpenGD77APRSSystemExtension *ext) {
++  if (_openGD77) {
++    _openGD77->deleteLater();
++    _openGD77 = nullptr;
++  }
++  if (ext) {
++    _openGD77 = ext;
++    ext->setParent(this);
++    connect(ext, SIGNAL(modified(ConfigItem *)), this, SIGNAL(modified(ConfigItem *)));
++  }
++}
++
+ YAML::Node
+ APRSSystem::serialize(const Context &context, const ErrorStack &err) {
+   YAML::Node node = PositioningSystem::serialize(context, err);
+diff --git a/lib/gpssystem.hh b/lib/gpssystem.hh
+index 2646702..9828967 100644
+--- a/lib/gpssystem.hh
++++ b/lib/gpssystem.hh
+@@ -4,6 +4,7 @@
+ #include "configreference.hh"
+ #include <QAbstractTableModel>
+ #include "anytone_extension.hh"
++#include "opengd77_extension.hh"
+ 
+ class Config;
+ class DMRContact;
+@@ -151,6 +152,8 @@ class APRSSystem: public PositioningSystem
+   Q_PROPERTY(QString message READ message WRITE setMessage)
+   /** Anytone sepecific settings. */
+   Q_PROPERTY(AnytoneFMAPRSSettingsExtension *anytone READ anytoneExtension WRITE setAnytoneExtension)
++  /** OpenGD77 sepecific settings. */
++  Q_PROPERTY(OpenGD77APRSSystemExtension *opengd77 READ openGD77Extension WRITE setOpenGD77Extension)
+ 
+ public:
+   static const unsigned PRIMARY_TABLE   = (0<<8);   ///< Primary icon table flag.
+@@ -251,6 +254,11 @@ public:
+   /** Sets the Anytone settings extension. */
+   void setAnytoneExtension(AnytoneFMAPRSSettingsExtension *ext);
+ 
++  /** Returns the OpenGD77 settings extension, if set. */
++  OpenGD77APRSSystemExtension *openGD77Extension() const;
++  /** Sets the OpenGD77 settings extension. */
++  void setOpenGD77Extension(OpenGD77APRSSystemExtension *ext);
++
+ public:
+   YAML::Node serialize(const Context &context, const ErrorStack &err=ErrorStack());
+   bool parse(const YAML::Node &node, Context &ctx, const ErrorStack &err=ErrorStack());
+@@ -277,6 +285,8 @@ protected:
+   QString _message;
+   /** Owns the Anytone settings extension. */
+   AnytoneFMAPRSSettingsExtension *_anytone;
++  /** Owns the OpenGD77 settings extension. */
++  OpenGD77APRSSystemExtension *_openGD77;
+ };
+ 
+ 
+diff --git a/lib/opengd77_extension.cc b/lib/opengd77_extension.cc
+index abe4341..d29caa6 100644
+--- a/lib/opengd77_extension.cc
++++ b/lib/opengd77_extension.cc
+@@ -77,7 +77,9 @@ OpenGD77ChannelExtension::setLocation(const QGeoCoordinate &loc) {
+ 
+ QString
+ OpenGD77ChannelExtension::locator() const {
+-  return deg2loc(location());
++  if (_location.isValid())
++    return deg2loc(location(), 8);
++  return "";
+ }
+ 
+ void
+@@ -136,3 +138,48 @@ void
+ OpenGD77ContactExtension::setTimeSlotOverride(TimeSlotOverride ts) {
+   _timeSlotOverride = ts;
+ }
++
++
++/* ******************************************************************************************** *
++ * Implementation of OpenGD77APRSSystemExtension
++ * ******************************************************************************************** */
++OpenGD77APRSSystemExtension::OpenGD77APRSSystemExtension(QObject *parent)
++  : ConfigExtension(parent), _location()
++{
++  // pass...
++}
++
++
++ConfigItem *
++OpenGD77APRSSystemExtension::clone() const {
++  auto ex = new OpenGD77APRSSystemExtension();
++  if (! ex->copy(*this)) {
++    ex->deleteLater();
++    return nullptr;
++  }
++  return ex;
++}
++
++
++const QGeoCoordinate &
++OpenGD77APRSSystemExtension::location() const {
++  return _location;
++}
++
++void
++OpenGD77APRSSystemExtension::setLocation(const QGeoCoordinate &loc) {
++  _location = loc;
++}
++
++QString
++OpenGD77APRSSystemExtension::locator() const {
++  if (_location.isValid())
++    return deg2loc(location(), 8);
++  return "";
++}
++
++void
++OpenGD77APRSSystemExtension::setLocator(const QString &loc) {
++  _location = loc2deg(loc);
++}
++
+diff --git a/lib/opengd77_extension.hh b/lib/opengd77_extension.hh
+index f588edc..f40162c 100644
+--- a/lib/opengd77_extension.hh
++++ b/lib/opengd77_extension.hh
+@@ -156,4 +156,33 @@ protected:
+ };
+ 
+ 
++class OpenGD77APRSSystemExtension: public ConfigExtension
++{
++  Q_OBJECT
++
++  Q_CLASSINFO("description", "OpenGD77 specific APRS settings.")
++
++  /** Sets a fixed location for the APRS report. */
++  Q_PROPERTY(QString location READ locator WRITE setLocator)
++  Q_CLASSINFO("locationDescription", "Allows to set a fixed location being transmitted.")
++
++public:
++  Q_INVOKABLE explicit OpenGD77APRSSystemExtension(QObject *parent=nullptr);
++
++  ConfigItem *clone() const;
++
++  /** Returns the fixed location for this APRS system. */
++  const QGeoCoordinate &location() const;
++  /** Returns the fixed location for this system. */
++  QString locator() const;
++  /** Sets the fixed location for this system. */
++  void setLocation(const QGeoCoordinate &loc);
++  /** Sets the fixed location for this system. */
++  void setLocator(const QString &locator);
++
++protected:
++  /** Holds the fixed location, if set. */
++  QGeoCoordinate _location;
++};
++
+ #endif // OPENGD77EXTENSION_HH
+diff --git a/lib/opengd77base_codeplug.cc b/lib/opengd77base_codeplug.cc
+index 338b9df..c4e2014 100644
+--- a/lib/opengd77base_codeplug.cc
++++ b/lib/opengd77base_codeplug.cc
+@@ -1,4 +1,5 @@
+ #include "opengd77base_codeplug.hh"
++#include "opengd77_extension.hh"
+ #include "radioid.hh"
+ #include "config.hh"
+ #include "logger.hh"
+@@ -955,8 +956,13 @@ OpenGD77BaseCodeplug::APRSSettingsElement::APRSSettingsElement(uint8_t *ptr)
+ void
+ OpenGD77BaseCodeplug::APRSSettingsElement::clear() {
+   Element::clear();
++
+   setName("");
+   clearFixedPosition();
++  // Likely the future APRS system transmit frequency
++  setUInt32_le(Offset::unknownInteger(), 12700000);
++  // Some random data, appears to be important
++  writeASCII(Offset::unknownBytes(), "RA", 2);
+ }
+ 
+ 
+@@ -1109,6 +1115,7 @@ OpenGD77BaseCodeplug::APRSSettingsElement::setBaudRate(BaudRate rate) {
+ bool
+ OpenGD77BaseCodeplug::APRSSettingsElement::encode(const APRSSystem *sys, const Context &ctx, const ErrorStack &err) {
+   Q_UNUSED(ctx); Q_UNUSED(err);
++  clear();
+ 
+   setName(sys->name());
+   setSourceSSID(sys->srcSSID());
+@@ -1135,6 +1142,12 @@ OpenGD77BaseCodeplug::APRSSettingsElement::encode(const APRSSystem *sys, const C
+   setBaudRate(BaudRate::Baud1200);
+   setPositionPrecision(PositionPrecision::Max);
+ 
++  if (nullptr == sys->openGD77Extension())
++    return true;
++
++  if (sys->openGD77Extension()->location().isValid())
++    setFixedPosition(sys->openGD77Extension()->location());
++
+   return true;
+ }
+ 
+@@ -1160,6 +1173,12 @@ OpenGD77BaseCodeplug::APRSSettingsElement::decode(const Context &ctx, const Erro
+   sys->setIcon(icon());
+   sys->setMessage(comment());
+ 
++  auto ext = new OpenGD77APRSSystemExtension();
++  sys->setOpenGD77Extension(ext);
++
++  if (hasFixedPosition())
++    ext->setLocation(fixedPosition());
++
+   return sys;
+ }
+ 
+diff --git a/lib/opengd77base_codeplug.hh b/lib/opengd77base_codeplug.hh
+index 364fbb8..3776aa7 100644
+--- a/lib/opengd77base_codeplug.hh
++++ b/lib/opengd77base_codeplug.hh
+@@ -588,9 +588,11 @@ public:
+       static constexpr unsigned int iconTable() { return 0x001d; }
+       static constexpr unsigned int iconIndex() { return 0x001e; }
+       static constexpr unsigned int comment() { return 0x001f; }
++      static constexpr unsigned int unknownInteger() { return 0x0037; }
+       static constexpr Bit positionPrecision() { return { 0x003d, 4}; }
+       static constexpr Bit useFixedPosition() { return { 0x003d, 1}; }
+       static constexpr Bit baudRate() { return { 0x003d, 0}; }
++      static constexpr unsigned int unknownBytes() { return 0x003e; }
+       /// @endcond
+     };
+   };
+diff --git a/lib/utils.cc b/lib/utils.cc
+index 1389f32..4d06b4e 100644
+--- a/lib/utils.cc
++++ b/lib/utils.cc
+@@ -478,59 +478,120 @@ align_addr(uint32_t addr, uint32_t block) {
+ 
+ QGeoCoordinate
+ loc2deg(const QString &loc) {
+-  double lon = 0, lat = 0;
++  double lon = 0, lat = 0, dlon = 20, dlat = 10;
+   if (2 > loc.size())
+     return QGeoCoordinate();
+-
+   QChar l = loc[0].toUpper();
+   QChar c = loc[1].toUpper();
+-  lon += double(int(l.toLatin1())-'A')*20;
+-  lat += double(int(c.toLatin1())-'A')*10;
++  lon += double(int(l.toLatin1())-'A')*dlon;
++  lat += double(int(c.toLatin1())-'A')*dlat;
+ 
+   if (4 > loc.size()) {
+     lon = lon - 180;
+     lat = lat - 90;
+     // Offset places coordinate in the middle of the square
+-    return QGeoCoordinate(lat+5.0, lon+10.0);
++    return QGeoCoordinate(lat+dlat/2, lon+dlon/2);
+   }
+ 
++  dlon /= 10; dlat /= 10;
+   l = loc[2].toUpper();
+   c = loc[3].toUpper();
+-  lon += double(int(l.toLatin1())-'0')*2;
+-  lat += double(int(c.toLatin1())-'0')*1;
++  lon += double(int(l.toLatin1())-'0')*dlon;
++  lat += double(int(c.toLatin1())-'0')*dlat;
+ 
+   if (6 > loc.size()){
+     lon = lon - 180;
+     lat = lat - 90;
+     // Offset places coordinate in the middle of the square
+-    return QGeoCoordinate(lat+0.5, lon+1.0);
++    return QGeoCoordinate(lat+dlat/2, lon+dlon/2);
+   }
+ 
++  dlon /= 24; dlat /= 24;
+   l = loc[4].toUpper();
+   c = loc[5].toUpper();
+-  lon += double(int(l.toLatin1())-'A')/12;
+-  lat += double(int(c.toLatin1())-'A')/24;
++  lon += double(int(l.toLatin1())-'A')*dlon;
++  lat += double(int(c.toLatin1())-'A')*dlat;
++
++  if (8 > loc.size()) {
++    lon = lon - 180;
++    lat = lat - 90;
++    // Offset places coordinate in the middle of the square
++    return QGeoCoordinate(lat+dlat/2, lon+dlon/2);
++  }
++
++  dlon /= 10; dlat /= 10;
++  l = loc[6].toUpper();
++  c = loc[7].toUpper();
++  lon += double(int(l.toLatin1())-'0')*dlon;
++  lat += double(int(c.toLatin1())-'0')*dlat;
++
++  if (10 > loc.size()) {
++    lon = lon - 180;
++    lat = lat - 90;
++    // Offset places coordinate in the middle of the square
++    return QGeoCoordinate(lat+dlat/2, lon+dlon/2);
++  }
++
++  dlon /= 24; dlat /= 24;
++  l = loc[8].toUpper();
++  c = loc[9].toUpper();
++  lon += double(int(l.toLatin1())-'A')*dlon;
++  lat += double(int(c.toLatin1())-'A')*dlat;
+ 
+   lon = lon - 180;
+   lat = lat - 90;
+   // Offset places coordinate in the middle of the square
+-  return QGeoCoordinate(lat+1./48, lon+1./24);
++  return QGeoCoordinate(lat+dlat/2, lon+dlon/2);
+ }
+ 
++
+ QString
+-deg2loc(const QGeoCoordinate &coor) {
++deg2loc(const QGeoCoordinate &coor, unsigned int size) {
+   QString loc;
+-  double lon = coor.longitude()+180;
+-  double lat = coor.latitude()+90;
+-  char l = char(lon/20); lon -= 20*double(l);
+-  char c = char(lat/10); lat -= 10*double(c);
++  double lon = (coor.longitude()+180)/360;
++  double lat = (coor.latitude()+90)/180;
++
++  size += (size % 2);
++  if (2 > size)
++    return loc;
++
++  lon *= 18; lat *= 18;
++  char l = lon; lon -= l;
++  char c = lat; lat -= c;
+   loc.append(l+'A'); loc.append(c+'A');
+-  l = char(lon/2); lon -= 2*double(l);
+-  c = char(lat/1); lat -= 1*double(c);
++
++  if (4 > size)
++    return loc;
++
++  lon *= 10; lat *= 10;
++  l = lon; lon -= l;
++  c = lat; lat -= c;
+   loc.append(l+'0'); loc.append(c+'0');
+-  l = char(lon*12); lon -= double(l)/12;
+-  c = char(lat*24); lat -= double(c)/24;
++
++  if (6 > size)
++    return loc;
++
++  lon *= 24; lat *= 24;
++  l = lon; lon -= l;
++  c = lat; lat -= c;
+   loc.append(l+'a'); loc.append(c+'a');
++
++  if (8 > size)
++    return loc;
++
++  lon *= 10; lat *= 10;
++  l = lon; lon -= l;
++  c = lat; lat -= c;
++  loc.append(l+'0'); loc.append(c+'0');
++
++  if (10 > size)
++    return loc;
++
++  lon *= 24; lat *= 24;
++  l = lon; //lon -= l;
++  c = lat; //lat -= c;
++  loc.append(l+'a'); loc.append(c+'a');
++
+   return loc;
+ }
+ 
+diff --git a/lib/utils.hh b/lib/utils.hh
+index 24374d2..35e7179 100644
+--- a/lib/utils.hh
++++ b/lib/utils.hh
+@@ -90,6 +90,6 @@ uint32_t align_size(uint32_t size, uint32_t block);
+ uint32_t align_addr(uint32_t addr, uint32_t block);
+ 
+ QGeoCoordinate loc2deg(const QString &loc);
+-QString deg2loc(const QGeoCoordinate &coor);
++QString deg2loc(const QGeoCoordinate &coor, unsigned int size=6);
+ 
+ #endif // UTILS_HH
+diff --git a/test/opengd77_test.cc b/test/opengd77_test.cc
+index 7e4d4b1..f4063e5 100644
+--- a/test/opengd77_test.cc
++++ b/test/opengd77_test.cc
+@@ -209,19 +209,41 @@ OpenGD77Test::testChannelFixedLocation() {
+   }
+ 
+   auto ext = new OpenGD77ChannelExtension();
+-  ext->setLocator("JO62jl");
++  ext->setLocator("JO62jl24");
+   config.channelList()->channel(0)->setOpenGD77ChannelExtension(ext);
+ 
+   if (! encodeDecode(config, decoded, err))
+     QFAIL(err.format().toLocal8Bit().constData());
+ 
+   QVERIFY(decoded.channelList()->channel(0)->openGD77ChannelExtension());
+-  QCOMPARE(decoded.channelList()->channel(0)->openGD77ChannelExtension()->locator(), "JO62jl");
++  QCOMPARE(decoded.channelList()->channel(0)->openGD77ChannelExtension()->locator(), "JO62jl24");
+ 
+-  ext->setLocator("JO59gw");
++  ext->setLocator("JO59gw73");
+   if (! encodeDecode(config, decoded, err))
+     QFAIL(err.format().toLocal8Bit().constData());
+-  QCOMPARE(decoded.channelList()->channel(0)->openGD77ChannelExtension()->locator(), "JO59gw");
++  QCOMPARE(decoded.channelList()->channel(0)->openGD77ChannelExtension()->locator(), "JO59gw73");
++}
++
++
++void
++OpenGD77Test::testAPRSSourceCall() {
++  ErrorStack err;
++  Config config, decoded;
++
++  if (! config.readYAML(":/data/fm_aprs_test.yaml", err)) {
++    QFAIL(QString("Cannot open codeplug file: %1")
++          .arg(err.format()).toLocal8Bit().constData());
++  }
++
++  if (! encodeDecode(config, decoded, err))
++    QFAIL(err.format().toLocal8Bit().constData());
++
++  QCOMPARE(decoded.posSystems()->count(), 1);
++  auto sys = decoded.posSystems()->aprsSystem(0);
++  QCOMPARE(sys->source(), "DM3MAT");
++
++  // OpenGD77 cannot encode revert channel
++  QVERIFY(decoded.posSystems()->aprsSystem(0)->revert()->isNull());
+ }
+ 
+ 
+diff --git a/test/opengd77_test.hh b/test/opengd77_test.hh
+index 2c1e139..b519228 100644
+--- a/test/opengd77_test.hh
++++ b/test/opengd77_test.hh
+@@ -27,6 +27,8 @@ private slots:
+   void testChannelPowerSettings();
+   /** Regression test for #541. */
+   void testOverrideChannelRadioId();
++  /** Regression test for #554. */
++  void testAPRSSourceCall();
+   /** Regression test for #549. */
+   void testChannelSubTones();
+   /** Regression test for #556. */
+diff --git a/test/utilstest.cc b/test/utilstest.cc
+index 3beb50e..dd93b7b 100644
+--- a/test/utilstest.cc
++++ b/test/utilstest.cc
+@@ -95,4 +95,26 @@ UtilsTest::testFrequencyParser() {
+   QCOMPARE(Frequency::fromString("100.0").inHz(), 100000000ULL);
+ }
+ 
++
++void
++UtilsTest::testLocator() {
++  QGeoCoordinate coor;
++
++  coor = loc2deg("JO62");
++  QVERIFY(coor.isValid());
++  QCOMPARE(deg2loc(coor, 4), "JO62");
++
++  coor = loc2deg("JO62jl");
++  QVERIFY(coor.isValid());
++  QCOMPARE(deg2loc(coor, 6), "JO62jl");
++
++  coor = loc2deg("JO62jl55");
++  QVERIFY(coor.isValid());
++  QCOMPARE(deg2loc(coor, 8), "JO62jl55");
++
++  coor = loc2deg("JO62jl55jj");
++  QVERIFY(coor.isValid());
++  QCOMPARE(deg2loc(coor, 10), "JO62jl55jj");
++}
++
+ QTEST_GUILESS_MAIN(UtilsTest)
+diff --git a/test/utilstest.hh b/test/utilstest.hh
+index a5f9b70..44cc4b1 100644
+--- a/test/utilstest.hh
++++ b/test/utilstest.hh
+@@ -20,6 +20,7 @@ private slots:
+   void testDecodeDMRID_bcd();
+   void testEncodeDMRID_bcd();
+   void testFrequencyParser();
++  void testLocator();
+ };
+ 
+ #endif // UTILSTEST_HH
+-- 
+2.49.0
+

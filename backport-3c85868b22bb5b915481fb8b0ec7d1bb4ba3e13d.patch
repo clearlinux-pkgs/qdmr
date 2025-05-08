@@ -1,0 +1,167 @@
+From 3c85868b22bb5b915481fb8b0ec7d1bb4ba3e13d Mon Sep 17 00:00:00 2001
+From: Hannes Matuschek <hmatuschek@gmail.com>
+Date: Thu, 23 Jan 2025 21:59:28 +0100
+Subject: [PATCH] Fixed location settings for OpenGD77 channels (#557)
+
+* Added regression test.
+* Fixed locator -> coordinate translation.
+---
+ lib/opengd77base_codeplug.cc | 20 ++++++++++++--------
+ lib/utils.cc                 |  9 ++++++---
+ test/opengd77_test.cc        | 28 ++++++++++++++++++++++++++++
+ test/opengd77_test.hh        |  2 ++
+ 4 files changed, 48 insertions(+), 11 deletions(-)
+
+diff --git a/lib/opengd77base_codeplug.cc b/lib/opengd77base_codeplug.cc
+index 67d7fdd..708b547 100644
+--- a/lib/opengd77base_codeplug.cc
++++ b/lib/opengd77base_codeplug.cc
+@@ -14,13 +14,13 @@ OpenGD77BaseCodeplug::encodeAngle(double angle) {
+   uint32_t sign = (angle < 0) ? 1 : 0;
+   uint32_t decimals = std::abs(int(angle * 10000));
+   uint32_t deg  = decimals/10000; decimals = decimals % 10000;
+-  return (sign << 23) | (deg <<15) | decimals;
++  return (sign << 23) | (deg << 15) | decimals;
+ }
+ 
+ double
+ OpenGD77BaseCodeplug::decodeAngle(uint32_t code) {
+   return (((code >> 23) & 1) ? -1 : 1) * (
+-        ((code >> 15) & 0xff) + double(code & 0x7ff)/10000
++        ((code >> 15) & 0xff) + double(code & 0x7fff)/10000
+         );
+ }
+ 
+@@ -211,11 +211,11 @@ OpenGD77BaseCodeplug::ChannelElement::hasFixedPosition() const {
+ 
+ QGeoCoordinate
+ OpenGD77BaseCodeplug::ChannelElement::fixedPosition() const {
+-  uint32_t latCode = (((uint32_t)getUInt8(Offset::latitude2())) << 24) +
+-      (((uint32_t)getUInt8(Offset::latitude1())) << 16) +
++  uint32_t latCode = (((uint32_t)getUInt8(Offset::latitude2())) << 16) +
++      (((uint32_t)getUInt8(Offset::latitude1())) << 8) +
+       ((uint32_t)getUInt8(Offset::latitude0()));
+-  uint32_t lonCode = (((uint32_t)getUInt8(Offset::longitude2())) << 24) +
+-      (((uint32_t)getUInt8(Offset::longitude1())) << 16) +
++  uint32_t lonCode = (((uint32_t)getUInt8(Offset::longitude2())) << 16) +
++      (((uint32_t)getUInt8(Offset::longitude1())) << 8) +
+       ((uint32_t)getUInt8(Offset::longitude0()));
+ 
+   return QGeoCoordinate(decodeAngle(latCode), decodeAngle(lonCode));
+@@ -223,7 +223,7 @@ OpenGD77BaseCodeplug::ChannelElement::fixedPosition() const {
+ 
+ void
+ OpenGD77BaseCodeplug::ChannelElement::setFixedPosition(const QGeoCoordinate &coordinate) {
+-  if (!coordinate.isValid()) {
++  if (! coordinate.isValid()) {
+     clearFixedPosition();
+     return;
+   }
+@@ -565,7 +565,10 @@ OpenGD77BaseCodeplug::ChannelElement::decode(Codeplug::Context &ctx, const Error
+   ch->openGD77ChannelExtension()->enableScanAllSkip(skipScan());
+   ch->openGD77ChannelExtension()->enableBeep(beep());
+   ch->openGD77ChannelExtension()->enablePowerSave(powerSave());
+-  ch->openGD77ChannelExtension()->setLocation(fixedPosition());
++  if (hasFixedPosition())
++    ch->openGD77ChannelExtension()->setLocation(fixedPosition());
++  else
++    ch->openGD77ChannelExtension()->setLocation(QGeoCoordinate());
+   ch->openGD77ChannelExtension()->setTalkerAliasTS1(aliasTimeSlot1());
+   ch->openGD77ChannelExtension()->setTalkerAliasTS2(aliasTimeSlot2());
+ 
+@@ -953,6 +956,7 @@ void
+ OpenGD77BaseCodeplug::APRSSettingsElement::clear() {
+   Element::clear();
+   setName("");
++  clearFixedPosition();
+ }
+ 
+ 
+diff --git a/lib/utils.cc b/lib/utils.cc
+index 9754dee..1389f32 100644
+--- a/lib/utils.cc
++++ b/lib/utils.cc
+@@ -490,7 +490,8 @@ loc2deg(const QString &loc) {
+   if (4 > loc.size()) {
+     lon = lon - 180;
+     lat = lat - 90;
+-    return QGeoCoordinate(lat, lon);
++    // Offset places coordinate in the middle of the square
++    return QGeoCoordinate(lat+5.0, lon+10.0);
+   }
+ 
+   l = loc[2].toUpper();
+@@ -501,7 +502,8 @@ loc2deg(const QString &loc) {
+   if (6 > loc.size()){
+     lon = lon - 180;
+     lat = lat - 90;
+-    return QGeoCoordinate(lat, lon);
++    // Offset places coordinate in the middle of the square
++    return QGeoCoordinate(lat+0.5, lon+1.0);
+   }
+ 
+   l = loc[4].toUpper();
+@@ -511,7 +513,8 @@ loc2deg(const QString &loc) {
+ 
+   lon = lon - 180;
+   lat = lat - 90;
+-  return QGeoCoordinate(lat, lon);
++  // Offset places coordinate in the middle of the square
++  return QGeoCoordinate(lat+1./48, lon+1./24);
+ }
+ 
+ QString
+diff --git a/test/opengd77_test.cc b/test/opengd77_test.cc
+index 44fa231..769cd42 100644
+--- a/test/opengd77_test.cc
++++ b/test/opengd77_test.cc
+@@ -166,5 +166,33 @@ OpenGD77Test::testChannelSubTones() {
+   QCOMPARE(rxTone.Hz(), 123.0);
+ }
+ 
++
++void
++OpenGD77Test::testChannelFixedLocation() {
++  ErrorStack err;
++  Config config, decoded;
++
++  if (! config.readYAML(":/data/fm_aprs_test.yaml", err)) {
++    QFAIL(QString("Cannot open codeplug file: %1")
++          .arg(err.format()).toLocal8Bit().constData());
++  }
++
++  auto ext = new OpenGD77ChannelExtension();
++  ext->setLocator("JO62jl");
++  config.channelList()->channel(0)->setOpenGD77ChannelExtension(ext);
++
++  if (! encodeDecode(config, decoded, err))
++    QFAIL(err.format().toLocal8Bit().constData());
++
++  QVERIFY(decoded.channelList()->channel(0)->openGD77ChannelExtension());
++  QCOMPARE(decoded.channelList()->channel(0)->openGD77ChannelExtension()->locator(), "JO62jl");
++
++  ext->setLocator("JO59gw");
++  if (! encodeDecode(config, decoded, err))
++    QFAIL(err.format().toLocal8Bit().constData());
++  QCOMPARE(decoded.channelList()->channel(0)->openGD77ChannelExtension()->locator(), "JO59gw");
++}
++
++
+ QTEST_GUILESS_MAIN(OpenGD77Test)
+ 
+diff --git a/test/opengd77_test.hh b/test/opengd77_test.hh
+index 9b34378..3968673 100644
+--- a/test/opengd77_test.hh
++++ b/test/opengd77_test.hh
+@@ -27,6 +27,8 @@ private slots:
+   void testOverrideChannelRadioId();
+   /** Regression test for #549. */
+   void testChannelSubTones();
++  /** Regression test for #556. */
++  void testChannelFixedLocation();
+ 
+ protected:
+   static bool encodeDecode(Config &config, Config &decoded, const ErrorStack &err=ErrorStack());
+-- 
+2.49.0
+

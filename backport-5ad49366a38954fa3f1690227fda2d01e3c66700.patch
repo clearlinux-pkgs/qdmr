@@ -1,0 +1,218 @@
+From 5ad49366a38954fa3f1690227fda2d01e3c66700 Mon Sep 17 00:00:00 2001
+From: Hannes Matuschek <hmatuschek@gmail.com>
+Date: Wed, 23 Apr 2025 10:22:29 +0200
+Subject: [PATCH] AnyTone default channel linking issue (fixes #563). (#571)
+
+* Fixed decoding/encoding of default channels/zones.
+* Added regression tests.
+---
+ lib/anytone_codeplug.cc | 24 +++++++++++++---------
+ test/d868uve_test.cc    | 43 ++++++++++++++++++++++++++++++++++++++++
+ test/d868uve_test.hh    |  1 +
+ test/d878uv_test.cc     | 44 +++++++++++++++++++++++++++++++++++++++++
+ test/d878uv_test.hh     |  2 ++
+ 5 files changed, 105 insertions(+), 9 deletions(-)
+
+diff --git a/lib/anytone_codeplug.cc b/lib/anytone_codeplug.cc
+index 4d50224..51628a3 100644
+--- a/lib/anytone_codeplug.cc
++++ b/lib/anytone_codeplug.cc
+@@ -1749,8 +1749,8 @@ AnytoneCodeplug::GeneralSettingsElement::fromConfig(const Flags &flags, Context
+              ext->bootSettings()->channelA()->as<Channel>())))
+         setDefaultChannelAToVFO();
+       else
+-        setDefaultChannelAIndex(
+-              ctx.index(ext->bootSettings()->channelA()->as<Channel>()));
++        setDefaultChannelAIndex(ext->bootSettings()->zoneA()->as<Zone>()->A()->indexOf(
++                                  ext->bootSettings()->channelA()->as<Channel>()));
+ 
+       setDefaultZoneIndexB(ctx.index(ext->bootSettings()->zoneA()->as<Zone>()));
+       if (ext->bootSettings()->channelB()->isNull() ||
+@@ -1758,7 +1758,8 @@ AnytoneCodeplug::GeneralSettingsElement::fromConfig(const Flags &flags, Context
+              ext->bootSettings()->channelB()->as<Channel>())))
+         setDefaultChannelBToVFO();
+       else
+-        setDefaultChannelBIndex(ctx.index(ext->bootSettings()->channelB()->as<Channel>()));
++        setDefaultChannelBIndex(ext->bootSettings()->zoneB()->as<Zone>()->A()->indexOf(
++                                  ext->bootSettings()->channelB()->as<Channel>()));
+     }
+ 
+     // Encode key settings
+@@ -1954,15 +1955,18 @@ AnytoneCodeplug::GeneralSettingsElement::linkSettings(RadioSettings *settings, C
+                   << " not defined.";
+       return false;
+     }
+-    ext->bootSettings()->zoneA()->set(ctx.get<Zone>(this->defaultZoneIndexA()));
++
++    Zone *zoneA = ctx.get<Zone>(this->defaultZoneIndexA());
++    ext->bootSettings()->zoneA()->set(zoneA);
+     if (this->defaultChannelAIsVFO()) {
+       // pass...
+-    } else if (! ctx.has<Channel>(this->defaultChannelAIndex())) {
++    } else if (this->defaultChannelAIndex() >= (unsigned int)zoneA->A()->count()) {
+       errMsg(err) << "Cannot link default channel A. Index " << this->defaultChannelAIndex()
+                   << " not defined.";
+       return false;
+     } else {
+-      ext->bootSettings()->channelA()->set(ctx.get<Channel>(this->defaultChannelAIndex()));
++      ext->bootSettings()->channelA()->set(
++            zoneA->A()->get(this->defaultChannelAIndex())->as<Channel>());
+     }
+ 
+     if (! ctx.has<Zone>(this->defaultZoneIndexB())) {
+@@ -1970,15 +1974,17 @@ AnytoneCodeplug::GeneralSettingsElement::linkSettings(RadioSettings *settings, C
+                   << " not defined.";
+       return false;
+     }
+-    ext->bootSettings()->zoneB()->set(ctx.get<Zone>(this->defaultZoneIndexB()));
++    Zone *zoneB = ctx.get<Zone>(this->defaultZoneIndexB());
++    ext->bootSettings()->zoneB()->set(zoneB);
+     if (this->defaultChannelBIsVFO()) {
+       // pass...
+-    } else if (! ctx.has<Channel>(this->defaultChannelBIndex())) {
++    } else if (this->defaultChannelBIndex() >= (unsigned int)zoneB->A()->count()) {
+       errMsg(err) << "Cannot link default channel B. Index " << this->defaultChannelBIndex()
+                   << " not defined.";
+       return false;
+     } else {
+-      ext->bootSettings()->channelB()->set(ctx.get<Channel>(this->defaultChannelBIndex()));
++      ext->bootSettings()->channelB()->set(
++            zoneB->A()->get(this->defaultChannelBIndex())->as<Channel>());
+     }
+   }
+ 
+diff --git a/test/d868uve_test.cc b/test/d868uve_test.cc
+index a396ec9..4e04325 100644
+--- a/test/d868uve_test.cc
++++ b/test/d868uve_test.cc
+@@ -233,5 +233,48 @@ D868UVETest::testRegressionSMSCount() {
+ }
+ 
+ 
++void
++D868UVETest::testRegressionDefaultChannel() {
++  ErrorStack err;
++
++  // Load config from file
++  Config config;
++  if (! config.readYAML(":/data/config_test.yaml", err)) {
++    QFAIL(QString("Cannot open codeplug file: %1")
++          .arg(err.format()).toStdString().c_str());
++  }
++  config.settings()->setAnytoneExtension(new AnytoneSettingsExtension());
++  config.settings()->anytoneExtension()->bootSettings()->zoneA()->set(config.zones()->zone(0));
++  config.settings()->anytoneExtension()->bootSettings()->channelA()->set(config.zones()->zone(0)->A()->get(0));
++  config.settings()->anytoneExtension()->bootSettings()->zoneB()->set(config.zones()->zone(0));
++  config.settings()->anytoneExtension()->bootSettings()->channelB()->set(config.zones()->zone(0)->A()->get(1));
++  config.settings()->anytoneExtension()->bootSettings()->enableDefaultChannel(true);
++
++  D868UVCodeplug codeplug;
++  Codeplug::Flags flags; flags.updateCodePlug=false;
++  if (! codeplug.encode(&config, flags, err)) {
++    QFAIL(QString("Cannot encode codeplug for AnyTone AT-D868UVE: %1")
++          .arg(err.format()).toStdString().c_str());
++  }
++
++  Config decoded;
++  if (! codeplug.decode(&decoded, err)) {
++      QFAIL(QString("Cannot decode codeplug for AnyTone AT-D868UVE: %1")
++            .arg(err.format()).toStdString().c_str());
++  }
++
++  QVERIFY(decoded.settings()->anytoneExtension());
++  QVERIFY(decoded.settings()->anytoneExtension()->bootSettings()->defaultChannelEnabled());
++  QCOMPARE(decoded.settings()->anytoneExtension()->bootSettings()->zoneA()->as<Zone>(),
++           decoded.zones()->zone(0));
++  QCOMPARE(decoded.settings()->anytoneExtension()->bootSettings()->channelA()->as<Channel>()->name(),
++           decoded.zones()->zone(0)->A()->get(0)->name());
++  QCOMPARE(decoded.settings()->anytoneExtension()->bootSettings()->zoneB()->as<Zone>(),
++           decoded.zones()->zone(0));
++  QCOMPARE(decoded.settings()->anytoneExtension()->bootSettings()->channelB()->as<Channel>()->name(),
++           decoded.zones()->zone(0)->A()->get(1)->name());
++}
++
++
+ QTEST_GUILESS_MAIN(D868UVETest)
+ 
+diff --git a/test/d868uve_test.hh b/test/d868uve_test.hh
+index 8d10d69..a445331 100644
+--- a/test/d868uve_test.hh
++++ b/test/d868uve_test.hh
+@@ -20,6 +20,7 @@ private slots:
+   void testSMSTemplates();
+   void testRegressionSMSTemplateOffset();
+   void testRegressionSMSCount();
++  void testRegressionDefaultChannel();
+ };
+ 
+ #endif // D878UV2TEST_HH
+diff --git a/test/d878uv_test.cc b/test/d878uv_test.cc
+index 226081c..c5b6131 100644
+--- a/test/d878uv_test.cc
++++ b/test/d878uv_test.cc
+@@ -292,5 +292,49 @@ D878UVTest::testFMAPRSSettings() {
+ }
+ 
+ 
++
++void
++D878UVTest::testRegressionDefaultChannel() {
++  ErrorStack err;
++
++  // Load config from file
++  Config config;
++  if (! config.readYAML(":/data/config_test.yaml", err)) {
++    QFAIL(QString("Cannot open codeplug file: %1")
++          .arg(err.format()).toStdString().c_str());
++  }
++  config.settings()->setAnytoneExtension(new AnytoneSettingsExtension());
++  config.settings()->anytoneExtension()->bootSettings()->zoneA()->set(config.zones()->zone(0));
++  config.settings()->anytoneExtension()->bootSettings()->channelA()->set(config.zones()->zone(0)->A()->get(0));
++  config.settings()->anytoneExtension()->bootSettings()->zoneB()->set(config.zones()->zone(0));
++  config.settings()->anytoneExtension()->bootSettings()->channelB()->set(config.zones()->zone(0)->A()->get(1));
++  config.settings()->anytoneExtension()->bootSettings()->enableDefaultChannel(true);
++
++  D868UVCodeplug codeplug;
++  Codeplug::Flags flags; flags.updateCodePlug=false;
++  if (! codeplug.encode(&config, flags, err)) {
++    QFAIL(QString("Cannot encode codeplug for AnyTone AT-D878UV: %1")
++          .arg(err.format()).toStdString().c_str());
++  }
++
++  Config decoded;
++  if (! codeplug.decode(&decoded, err)) {
++      QFAIL(QString("Cannot decode codeplug for AnyTone AT-D878UV: %1")
++            .arg(err.format()).toStdString().c_str());
++  }
++
++  QVERIFY(decoded.settings()->anytoneExtension());
++  QVERIFY(decoded.settings()->anytoneExtension()->bootSettings()->defaultChannelEnabled());
++  QCOMPARE(decoded.settings()->anytoneExtension()->bootSettings()->zoneA()->as<Zone>(),
++           decoded.zones()->zone(0));
++  QCOMPARE(decoded.settings()->anytoneExtension()->bootSettings()->channelA()->as<Channel>()->name(),
++           decoded.zones()->zone(0)->A()->get(0)->name());
++  QCOMPARE(decoded.settings()->anytoneExtension()->bootSettings()->zoneB()->as<Zone>(),
++           decoded.zones()->zone(0));
++  QCOMPARE(decoded.settings()->anytoneExtension()->bootSettings()->channelB()->as<Channel>()->name(),
++           decoded.zones()->zone(0)->A()->get(1)->name());
++}
++
++
+ QTEST_GUILESS_MAIN(D878UVTest)
+ 
+diff --git a/test/d878uv_test.hh b/test/d878uv_test.hh
+index f260fdc..03d1324 100644
+--- a/test/d878uv_test.hh
++++ b/test/d878uv_test.hh
+@@ -25,6 +25,8 @@ private slots:
+ 
+   void testFMAPRSSettings();
+ 
++  void testRegressionDefaultChannel();
++
+ protected:
+   Config _micGainConfig;
+   QTextStream _stderr;
+-- 
+2.49.0
+

@@ -1,0 +1,236 @@
+From 0fb6a8a563260e6498289ca037933bf36c646646 Mon Sep 17 00:00:00 2001
+From: Hannes Matuschek <hmatuschek@gmail.com>
+Date: Fri, 10 Jan 2025 14:29:53 +0100
+Subject: [PATCH] Fixed linking and decoding of per-channel DMR IDs for
+ OpenGD77, fixes #541. (#543)
+
+* Fixed decoding of per channel DMR Id and APRS system.
+* Fixed linking of OpenGD77 channels. Addresses #541.
+* Added regression test for OpenGD77 radio id decoding.
+---
+ lib/opengd77_codeplug.cc     |  6 ++++++
+ lib/opengd77_codeplug.hh     |  1 +
+ lib/opengd77base_codeplug.cc | 37 ++++++++++++++++++++++++++++++++----
+ lib/opengd77base_codeplug.hh |  4 ++++
+ lib/openuv380_codeplug.cc    |  6 ++++++
+ lib/openuv380_codeplug.hh    |  1 +
+ test/opengd77_test.cc        | 27 ++++++++++++++++++++++++++
+ test/opengd77_test.hh        |  2 ++
+ 8 files changed, 80 insertions(+), 4 deletions(-)
+
+diff --git a/lib/opengd77_codeplug.cc b/lib/opengd77_codeplug.cc
+index 868ea40..32d8ca9 100644
+--- a/lib/opengd77_codeplug.cc
++++ b/lib/opengd77_codeplug.cc
+@@ -79,6 +79,12 @@ OpenGD77Codeplug::decodeAPRSSettings(Context &ctx, const ErrorStack &err) {
+       .decode(ctx, err);
+ }
+ 
++bool
++OpenGD77Codeplug::linkAPRSSettings(Context &ctx, const ErrorStack &err) {
++  return APRSSettingsBankElement(data(Offset::aprsSettings(), ImageIndex::aprsSettings()))
++      .link(ctx, err);
++}
++
+ 
+ bool
+ OpenGD77Codeplug::encodeBootSettings(const Flags &flags, Context &ctx, const ErrorStack &err) {
+diff --git a/lib/opengd77_codeplug.hh b/lib/opengd77_codeplug.hh
+index 8dd3b05..1e8f841 100644
+--- a/lib/opengd77_codeplug.hh
++++ b/lib/opengd77_codeplug.hh
+@@ -73,6 +73,7 @@ public:
+   void clearAPRSSettings();
+   bool encodeAPRSSettings(const Flags &flags, Context &ctx, const ErrorStack &err=ErrorStack());
+   bool decodeAPRSSettings(Context &ctx, const ErrorStack &err=ErrorStack());
++  bool linkAPRSSettings(Context &ctx, const ErrorStack &err=ErrorStack());
+ 
+   void clearContacts();
+   bool encodeContacts(const Flags &flags, Context &ctx, const ErrorStack &err=ErrorStack());
+diff --git a/lib/opengd77base_codeplug.cc b/lib/opengd77base_codeplug.cc
+index 2c2dd8a..b801a3e 100644
+--- a/lib/opengd77base_codeplug.cc
++++ b/lib/opengd77base_codeplug.cc
+@@ -570,22 +570,28 @@ OpenGD77BaseCodeplug::ChannelElement::link(Channel *c, Context &ctx, const Error
+   Q_UNUSED(err)
+ 
+   // Link common
+-  // Link digital channel
++
+   if (c->is<DMRChannel>()) {
++    // Link DMR channel
+     DMRChannel *dc = c->as<DMRChannel>();
+     if (hasGroupList() && ctx.has<RXGroupList>(groupListIndex()))
+       dc->setGroupListObj(ctx.get<RXGroupList>(groupListIndex()));
+     if (hasTXContact() && ctx.has<DMRContact>(txContactIndex()))
+       dc->setTXContactObj(ctx.get<DMRContact>(txContactIndex()));
+-    if (hasDMRId()) {
++    // Testing dmrId() == 0 fixes a bug in the OpenGD77 firmware. May change in future.
++    if (hasDMRId() && (0 != dmrId())) {
++      logDebug() << "Channel '" << c->name() << "' overrides default DMR id with "
++                 << dmrId() << ".";
+       auto id = ctx.config()->radioIDs()->find(dmrId());
+       if (nullptr == id) {
++        logDebug() << "DMR Id " << dmrId() << " is not defined yet, create one as 'Unknown ID'.";
+         id = new DMRRadioID(QString("Unknown ID"), dmrId());
+         ctx.config()->radioIDs()->add(id);
+       }
+       dc->setRadioIdObj(id);
+     }
+   } else if (c->is<FMChannel>()) {
++    // Link FM channel
+     auto fm = c->as<FMChannel>();
+     if (hasAPRSIndex()) {
+       if (! ctx.has<APRSSystem>(aprsIndex())) {
+@@ -1134,8 +1140,8 @@ OpenGD77BaseCodeplug::APRSSettingsElement::decode(const Context &ctx, const Erro
+   sys->setDestination("APN000", 0);
+   sys->setSrcSSID(sourceSSID());
+   QStringList path;
+-  if (hasVia1()) path.append(QString("%1-%2").arg(via1Call(), via1SSID()));
+-  if (hasVia2()) path.append(QString("%1-%2").arg(via2Call(), via2SSID()));
++  if (hasVia1()) path.append(QString("%1-%2").arg(via1Call()).arg(via1SSID()));
++  if (hasVia2()) path.append(QString("%1-%2").arg(via2Call()).arg(via2SSID()));
+   sys->setPath(path.join(","));
+ 
+   sys->setIcon(icon());
+@@ -1221,6 +1227,24 @@ OpenGD77BaseCodeplug::APRSSettingsBankElement::decode(Context &ctx, const ErrorS
+   return true;
+ }
+ 
++bool
++OpenGD77BaseCodeplug::APRSSettingsBankElement::link(Context &ctx, const ErrorStack &err) {
++  for (unsigned int i=0; i<Limit::systems(); i++) {
++    if (system(i).isValid()) {
++      if (! ctx.has<APRSSystem>(i)) {
++        errMsg(err) << "Cannot link APRS system at index " << i << ": Not found in context.";
++        return false;
++      }
++      if (! system(i).link(ctx.get<APRSSystem>(i), ctx, err)) {
++        errMsg(err) << "Cannot link APRS system '" << ctx.get<APRSSystem>(i)->name()
++                    << "' at index " << i << ".";
++        return false;
++      }
++    }
++  }
++  return true;
++}
++
+ 
+ 
+ /* ******************************************************************************************** *
+@@ -2621,6 +2645,11 @@ OpenGD77BaseCodeplug::decodeElements(Context &ctx, const ErrorStack &err) {
+     return false;
+   }
+ 
++  if (! this->linkAPRSSettings(ctx, err)) {
++    errMsg(err) << "Cannot decode APRS settings.";
++    return false;
++  }
++
+   return true;
+ }
+ 
+diff --git a/lib/opengd77base_codeplug.hh b/lib/opengd77base_codeplug.hh
+index 866e10a..b9cdaa0 100644
+--- a/lib/opengd77base_codeplug.hh
++++ b/lib/opengd77base_codeplug.hh
+@@ -621,6 +621,8 @@ public:
+     virtual bool encode(Context &ctx, const ErrorStack &err=ErrorStack());
+     /** Decodes all FM APRS systems. */
+     virtual bool decode(Context &ctx, const ErrorStack &err=ErrorStack());
++    /** Links all FM APRS systems. */
++    virtual bool link(Context &ctx, const ErrorStack &err=ErrorStack());
+ 
+   public:
+     /** Some limits for the bank. */
+@@ -1346,6 +1348,8 @@ public:
+   virtual bool encodeAPRSSettings(const Flags &flags, Context &ctx, const ErrorStack &err=ErrorStack()) = 0;
+   /** Decodes the APRS settings. */
+   virtual bool decodeAPRSSettings(Context &ctx, const ErrorStack &err=ErrorStack()) = 0;
++  /** Links the APRS settings. */
++  virtual bool linkAPRSSettings(Context &ctx, const ErrorStack &err=ErrorStack()) = 0;
+ 
+   /** Clears all DTMF contacts in the codeplug. */
+   virtual void clearDTMFContacts() = 0;
+diff --git a/lib/openuv380_codeplug.cc b/lib/openuv380_codeplug.cc
+index b16f0c5..985359a 100644
+--- a/lib/openuv380_codeplug.cc
++++ b/lib/openuv380_codeplug.cc
+@@ -80,6 +80,12 @@ OpenUV380Codeplug::decodeAPRSSettings(Context &ctx, const ErrorStack &err) {
+       .decode(ctx, err);
+ }
+ 
++bool
++OpenUV380Codeplug::linkAPRSSettings(Context &ctx, const ErrorStack &err) {
++  return APRSSettingsBankElement(data(Offset::aprsSettings(), ImageIndex::aprsSettings()))
++      .link(ctx, err);
++}
++
+ 
+ bool
+ OpenUV380Codeplug::encodeBootSettings(const Flags &flags, Context &ctx, const ErrorStack &err) {
+diff --git a/lib/openuv380_codeplug.hh b/lib/openuv380_codeplug.hh
+index 25d0262..ab22ae8 100644
+--- a/lib/openuv380_codeplug.hh
++++ b/lib/openuv380_codeplug.hh
+@@ -30,6 +30,7 @@ public:
+   void clearAPRSSettings();
+   bool encodeAPRSSettings(const Flags &flags, Context &ctx, const ErrorStack &err=ErrorStack());
+   bool decodeAPRSSettings(Context &ctx, const ErrorStack &err=ErrorStack());
++  bool linkAPRSSettings(Context &ctx, const ErrorStack &err=ErrorStack());
+ 
+   void clearContacts();
+   bool encodeContacts(const Flags &flags, Context &ctx, const ErrorStack &err=ErrorStack());
+diff --git a/test/opengd77_test.cc b/test/opengd77_test.cc
+index e6d389b..dc3b40b 100644
+--- a/test/opengd77_test.cc
++++ b/test/opengd77_test.cc
+@@ -111,5 +111,32 @@ OpenGD77Test::testChannelPowerSettings() {
+ }
+ 
+ 
++void
++OpenGD77Test::testOverrideChannelRadioId() {
++  ErrorStack err;
++  Config config, decoded;
++
++  if (! config.readYAML(":/data/config_test.yaml", err)) {
++    QFAIL(QString("Cannot open codeplug file: %1")
++          .arg(err.format()).toLocal8Bit().constData());
++  }
++
++  // add another DMR ID and assign it to two channels
++  auto id2 = new DMRRadioID("Test", 1234567);
++  config.radioIDs()->add(id2);
++  config.channelList()->channel(0)->as<DMRChannel>()->setRadioIdObj(id2);
++  config.channelList()->channel(1)->as<DMRChannel>()->setRadioIdObj(id2);
++
++  if (! encodeDecode(config, decoded, err))
++    QFAIL(err.format().toLocal8Bit().constData());
++
++  QCOMPARE(decoded.radioIDs()->count(), 2);
++  QVERIFY(! decoded.channelList()->channel(0)->as<DMRChannel>()->radioId()->isNull());
++  QCOMPARE(decoded.channelList()->channel(0)->as<DMRChannel>()->radioIdObj()->number(), 1234567);
++  QVERIFY(! decoded.channelList()->channel(1)->as<DMRChannel>()->radioId()->isNull());
++  QCOMPARE(decoded.channelList()->channel(1)->as<DMRChannel>()->radioIdObj()->number(), 1234567);
++}
++
++
+ QTEST_GUILESS_MAIN(OpenGD77Test)
+ 
+diff --git a/test/opengd77_test.hh b/test/opengd77_test.hh
+index 6b188eb..2be4ee6 100644
+--- a/test/opengd77_test.hh
++++ b/test/opengd77_test.hh
+@@ -23,6 +23,8 @@ private slots:
+ 
+   /** Regression test for #507 */
+   void testChannelPowerSettings();
++  /** Regression test for #541. */
++  void testOverrideChannelRadioId();
+ 
+ protected:
+   static bool encodeDecode(Config &config, Config &decoded, const ErrorStack &err=ErrorStack());
+-- 
+2.49.0
+

@@ -1,0 +1,111 @@
+From 06621df3ea6d9cdb1688fc184e999a7fbbef4fa3 Mon Sep 17 00:00:00 2001
+From: Hannes Matuschek <hmatuschek@gmail.com>
+Date: Fri, 10 Jan 2025 14:16:15 +0100
+Subject: [PATCH] Resized channel dialogs. (#545)
+
+* Fixed default size of channel dialogs. Addresses #542.
+* Fixed size policies.
+---
+ src/analogchanneldialog.ui  | 18 +++++++++++++++---
+ src/digitalchanneldialog.ui | 14 +++++++++++++-
+ 2 files changed, 28 insertions(+), 4 deletions(-)
+
+diff --git a/src/analogchanneldialog.ui b/src/analogchanneldialog.ui
+index dc7cc80..b29ddd8 100644
+--- a/src/analogchanneldialog.ui
++++ b/src/analogchanneldialog.ui
+@@ -7,7 +7,7 @@
+     <x>0</x>
+     <y>0</y>
+     <width>677</width>
+-    <height>507</height>
++    <height>499</height>
+    </rect>
+   </property>
+   <property name="windowTitle">
+@@ -137,6 +137,12 @@
+           <layout class="QHBoxLayout" name="horizontalLayout_7">
+            <item>
+             <widget class="QSpinBox" name="totValue">
++             <property name="sizePolicy">
++              <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
++               <horstretch>0</horstretch>
++               <verstretch>0</verstretch>
++              </sizepolicy>
++             </property>
+              <property name="specialValueText">
+               <string>Off</string>
+              </property>
+@@ -168,6 +174,12 @@
+           <layout class="QHBoxLayout" name="horizontalLayout_10">
+            <item>
+             <widget class="QSpinBox" name="voxValue">
++             <property name="sizePolicy">
++              <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
++               <horstretch>0</horstretch>
++               <verstretch>0</verstretch>
++              </sizepolicy>
++             </property>
+              <property name="specialValueText">
+               <string>Off</string>
+              </property>
+@@ -317,7 +329,7 @@
+          <item row="2" column="1">
+           <widget class="SelectiveCallBox" name="rxTone" native="true">
+            <property name="sizePolicy">
+-            <sizepolicy hsizetype="MinimumExpanding" vsizetype="Minimum">
++            <sizepolicy hsizetype="MinimumExpanding" vsizetype="Preferred">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+@@ -327,7 +339,7 @@
+          <item row="3" column="1">
+           <widget class="SelectiveCallBox" name="txTone" native="true">
+            <property name="sizePolicy">
+-            <sizepolicy hsizetype="MinimumExpanding" vsizetype="Minimum">
++            <sizepolicy hsizetype="MinimumExpanding" vsizetype="Preferred">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+diff --git a/src/digitalchanneldialog.ui b/src/digitalchanneldialog.ui
+index ff6f290..47b3d98 100644
+--- a/src/digitalchanneldialog.ui
++++ b/src/digitalchanneldialog.ui
+@@ -7,7 +7,7 @@
+     <x>0</x>
+     <y>0</y>
+     <width>651</width>
+-    <height>487</height>
++    <height>509</height>
+    </rect>
+   </property>
+   <property name="windowTitle">
+@@ -157,6 +157,12 @@
+           <layout class="QHBoxLayout" name="horizontalLayout_3">
+            <item>
+             <widget class="QSpinBox" name="totValue">
++             <property name="sizePolicy">
++              <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
++               <horstretch>0</horstretch>
++               <verstretch>0</verstretch>
++              </sizepolicy>
++             </property>
+              <property name="toolTip">
+               <string>Specifies the transmit timeout in seconds. A value of 0 means that the transmit timeout is disabled.</string>
+              </property>
+@@ -191,6 +197,12 @@
+           <layout class="QHBoxLayout" name="horizontalLayout_4">
+            <item>
+             <widget class="QSpinBox" name="voxValue">
++             <property name="sizePolicy">
++              <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
++               <horstretch>0</horstretch>
++               <verstretch>0</verstretch>
++              </sizepolicy>
++             </property>
+              <property name="specialValueText">
+               <string>Off</string>
+              </property>
+-- 
+2.49.0
+

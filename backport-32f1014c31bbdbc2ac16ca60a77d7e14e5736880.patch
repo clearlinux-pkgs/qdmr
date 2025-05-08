@@ -1,0 +1,239 @@
+From 32f1014c31bbdbc2ac16ca60a77d7e14e5736880 Mon Sep 17 00:00:00 2001
+From: Hannes Matuschek <hmatuschek@gmail.com>
+Date: Mon, 10 Feb 2025 11:37:21 +0100
+Subject: [PATCH] Fixed enforcement of lower list limits. (#567)
+
+---
+ lib/d578uv_limits.cc   | 2 +-
+ lib/d868uv_limits.cc   | 2 +-
+ lib/d878uv2_limits.cc  | 2 +-
+ lib/d878uv_limits.cc   | 2 +-
+ lib/dm1701_limits.cc   | 2 +-
+ lib/dmr6x2uv_limits.cc | 2 +-
+ lib/dr1801uv_limits.cc | 2 +-
+ lib/gd73_limits.cc     | 2 +-
+ lib/gd77_limits.cc     | 2 +-
+ lib/md2017_limits.cc   | 2 +-
+ lib/md390_limits.cc    | 2 +-
+ lib/opengd77_limits.cc | 4 ++--
+ lib/radiolimits.cc     | 4 ++--
+ lib/rd5r_limits.cc     | 2 +-
+ lib/uv390_limits.cc    | 2 +-
+ 15 files changed, 17 insertions(+), 17 deletions(-)
+
+diff --git a/lib/d578uv_limits.cc b/lib/d578uv_limits.cc
+index 45774fd..c910300 100644
+--- a/lib/d578uv_limits.cc
++++ b/lib/d578uv_limits.cc
+@@ -143,7 +143,7 @@ D578UVLimits::D578UVLimits(const std::initializer_list<std::pair<Frequency, Freq
+   /* Define limits for scan lists. */
+   add("scanlists",
+       new RadioLimitList(
+-        ScanList::staticMetaObject, 1, 250, new RadioLimitObject{
++        ScanList::staticMetaObject, 0, 250, new RadioLimitObject{
+           { "name", new RadioLimitString(1, 16, RadioLimitString::ASCII) },
+           { "primary", new RadioLimitObjRef(Channel::staticMetaObject, false) },
+           { "secondary", new RadioLimitObjRef(Channel::staticMetaObject, true) },
+diff --git a/lib/d868uv_limits.cc b/lib/d868uv_limits.cc
+index fc27b2c..a2800d4 100644
+--- a/lib/d868uv_limits.cc
++++ b/lib/d868uv_limits.cc
+@@ -143,7 +143,7 @@ D868UVLimits::D868UVLimits(const std::initializer_list<std::pair<Frequency, Freq
+   /* Define limits for scan lists. */
+   add("scanlists",
+       new RadioLimitList(
+-        ScanList::staticMetaObject, 1, 250, new RadioLimitObject{
++        ScanList::staticMetaObject, 0, 250, new RadioLimitObject{
+           { "name", new RadioLimitString(1, 16, RadioLimitString::ASCII) },
+           { "primary", new RadioLimitObjRef(Channel::staticMetaObject, false) },
+           { "secondary", new RadioLimitObjRef(Channel::staticMetaObject, true) },
+diff --git a/lib/d878uv2_limits.cc b/lib/d878uv2_limits.cc
+index a63fc9f..4eb8bda 100644
+--- a/lib/d878uv2_limits.cc
++++ b/lib/d878uv2_limits.cc
+@@ -143,7 +143,7 @@ D878UV2Limits::D878UV2Limits(const std::initializer_list<std::pair<Frequency, Fr
+   /* Define limits for scan lists. */
+   add("scanlists",
+       new RadioLimitList(
+-        ScanList::staticMetaObject, 1, 250, new RadioLimitObject{
++        ScanList::staticMetaObject, 0, 250, new RadioLimitObject{
+           { "name", new RadioLimitString(1, 16, RadioLimitString::ASCII) },
+           { "primary", new RadioLimitObjRef(Channel::staticMetaObject, false) },
+           { "secondary", new RadioLimitObjRef(Channel::staticMetaObject, true) },
+diff --git a/lib/d878uv_limits.cc b/lib/d878uv_limits.cc
+index 599780d..a245cc6 100644
+--- a/lib/d878uv_limits.cc
++++ b/lib/d878uv_limits.cc
+@@ -143,7 +143,7 @@ D878UVLimits::D878UVLimits(const std::initializer_list<std::pair<Frequency, Freq
+   /* Define limits for scan lists. */
+   add("scanlists",
+       new RadioLimitList(
+-        ScanList::staticMetaObject, 1, 250, new RadioLimitObject{
++        ScanList::staticMetaObject, 0, 250, new RadioLimitObject{
+           { "name", new RadioLimitString(1, 16, RadioLimitString::ASCII) },
+           { "primary", new RadioLimitObjRef(Channel::staticMetaObject, false) },
+           { "secondary", new RadioLimitObjRef(Channel::staticMetaObject, true) },
+diff --git a/lib/dm1701_limits.cc b/lib/dm1701_limits.cc
+index 8cb0324..4b1361a 100644
+--- a/lib/dm1701_limits.cc
++++ b/lib/dm1701_limits.cc
+@@ -143,7 +143,7 @@ DM1701Limits::DM1701Limits(QObject *parent)
+ 
+   /* Define limits for scan lists. */
+   add("scanlists", new RadioLimitList(
+-        ScanList::staticMetaObject, 1, 250, new RadioLimitObject{
++        ScanList::staticMetaObject, 0, 250, new RadioLimitObject{
+           { "name", new RadioLimitString(1, 16, RadioLimitString::Unicode) },
+           { "primary", new RadioLimitObjRef(Channel::staticMetaObject, true) },
+           { "secondary", new RadioLimitObjRef(Channel::staticMetaObject, true) },
+diff --git a/lib/dmr6x2uv_limits.cc b/lib/dmr6x2uv_limits.cc
+index 96204f3..e670423 100644
+--- a/lib/dmr6x2uv_limits.cc
++++ b/lib/dmr6x2uv_limits.cc
+@@ -140,7 +140,7 @@ DMR6X2UVLimits::DMR6X2UVLimits(const std::initializer_list<std::pair<Frequency,
+   /* Define limits for scan lists. */
+   add("scanlists",
+       new RadioLimitList(
+-        ScanList::staticMetaObject, 1, 250, new RadioLimitObject{
++        ScanList::staticMetaObject, 0, 250, new RadioLimitObject{
+           { "name", new RadioLimitString(1, 16, RadioLimitString::ASCII) },
+           { "primary", new RadioLimitObjRef(Channel::staticMetaObject, false) },
+           { "secondary", new RadioLimitObjRef(Channel::staticMetaObject, true) },
+diff --git a/lib/dr1801uv_limits.cc b/lib/dr1801uv_limits.cc
+index 1fe3fe3..3ae5474 100644
+--- a/lib/dr1801uv_limits.cc
++++ b/lib/dr1801uv_limits.cc
+@@ -152,7 +152,7 @@ DR1801UVLimits::DR1801UVLimits(QObject *parent)
+ 
+   /* Define limits for scan lists. */
+   add("scanlists", new RadioLimitList(
+-        ScanList::staticMetaObject, 1, DR1801UVCodeplug::ScanListBankElement::Limit::scanListCount(),
++        ScanList::staticMetaObject, 0, DR1801UVCodeplug::ScanListBankElement::Limit::scanListCount(),
+         new RadioLimitObject{
+           { "name", new RadioLimitString(
+             1, DR1801UVCodeplug::ScanListElement::Limit::nameLength(), RadioLimitString::Unicode) },
+diff --git a/lib/gd73_limits.cc b/lib/gd73_limits.cc
+index ff8c8a9..c4435f4 100644
+--- a/lib/gd73_limits.cc
++++ b/lib/gd73_limits.cc
+@@ -137,7 +137,7 @@ GD73Limits::GD73Limits(QObject *parent)
+ 
+   /* Check scan lists. */
+   add("scanlists", new RadioLimitList(
+-        ScanList::staticMetaObject, 1, GD73Codeplug::ScanListBankElement::Limit::memberCount(), new RadioLimitObject{
++        ScanList::staticMetaObject, 0, GD73Codeplug::ScanListBankElement::Limit::memberCount(), new RadioLimitObject{
+           { "name", new RadioLimitString(1, GD73Codeplug::ScanListElement::Limit::nameLength(), RadioLimitString::Unicode) },
+           { "primary", new RadioLimitObjRef(Channel::staticMetaObject, false) },
+           { "secondary", new RadioLimitObjRef(Channel::staticMetaObject, true) },
+diff --git a/lib/gd77_limits.cc b/lib/gd77_limits.cc
+index 9e25f38..59c251d 100644
+--- a/lib/gd77_limits.cc
++++ b/lib/gd77_limits.cc
+@@ -146,7 +146,7 @@ GD77Limits::GD77Limits(QObject *parent)
+ 
+   /* Ignore scan lists. */
+   add("scanlists", new RadioLimitList(
+-        ScanList::staticMetaObject, 1, 64, new RadioLimitObject{
++        ScanList::staticMetaObject, 0, 64, new RadioLimitObject{
+           { "name", new RadioLimitString(1, 15, RadioLimitString::ASCII) },
+           { "primary", new RadioLimitObjRef(Channel::staticMetaObject, false) },
+           { "secondary", new RadioLimitObjRef(Channel::staticMetaObject, true) },
+diff --git a/lib/md2017_limits.cc b/lib/md2017_limits.cc
+index 32d4def..cbdd718 100644
+--- a/lib/md2017_limits.cc
++++ b/lib/md2017_limits.cc
+@@ -143,7 +143,7 @@ MD2017Limits::MD2017Limits(QObject *parent)
+ 
+   /* Define limits for scan lists. */
+   add("scanlists", new RadioLimitList(
+-        ScanList::staticMetaObject, 1, 250, new RadioLimitObject{
++        ScanList::staticMetaObject, 0, 250, new RadioLimitObject{
+           { "name", new RadioLimitString(1, 16, RadioLimitString::Unicode) },
+           { "primary", new RadioLimitObjRef(Channel::staticMetaObject, true) },
+           { "secondary", new RadioLimitObjRef(Channel::staticMetaObject, true) },
+diff --git a/lib/md390_limits.cc b/lib/md390_limits.cc
+index 46627aa..0234dc3 100644
+--- a/lib/md390_limits.cc
++++ b/lib/md390_limits.cc
+@@ -140,7 +140,7 @@ MD390Limits::MD390Limits(const std::initializer_list<std::pair<Frequency,Frequen
+ 
+   /* Define limits for scan lists. */
+   add("scanlists", new RadioLimitList(
+-        ScanList::staticMetaObject, 1, 250, new RadioLimitObject{
++        ScanList::staticMetaObject, 0, 250, new RadioLimitObject{
+           { "name", new RadioLimitString(1, 16, RadioLimitString::Unicode) },
+           { "primary", new RadioLimitObjRef(Channel::staticMetaObject, true) },
+           { "secondary", new RadioLimitObjRef(Channel::staticMetaObject, true) },
+diff --git a/lib/opengd77_limits.cc b/lib/opengd77_limits.cc
+index e90886e..afa0dce 100644
+--- a/lib/opengd77_limits.cc
++++ b/lib/opengd77_limits.cc
+@@ -69,7 +69,7 @@ OpenGD77Limits::OpenGD77Limits(QObject *parent)
+   /* Define limits for group lists. */
+   add("groupLists",
+       new RadioLimitList(
+-            RXGroupList::staticMetaObject, 1, 76, new RadioLimitObject {
++            RXGroupList::staticMetaObject, 0, 76, new RadioLimitObject {
+               { "name", new RadioLimitString(1, 16, RadioLimitString::ASCII) },
+               // allow for any digital contact reference
+               { "contacts", new RadioLimitRefList(1, 32, DMRContact::staticMetaObject) }
+@@ -141,7 +141,7 @@ OpenGD77Limits::OpenGD77Limits(QObject *parent)
+   /* Define limits for zone list. */
+   add("zones",
+       new RadioLimitList(
+-        Zone::staticMetaObject, 1, 68, new RadioLimitSingleZone(
++        Zone::staticMetaObject, 0, 68, new RadioLimitSingleZone(
+           80, {
+             { "name", new RadioLimitString(1, 16, RadioLimitString::ASCII) }, // 16 ASCII chars in name
+             { "anytone", new RadioLimitIgnored(RadioLimitIssue::Hint) }     // ignore AnyTone extensions
+diff --git a/lib/radiolimits.cc b/lib/radiolimits.cc
+index b5aeff8..332077b 100644
+--- a/lib/radiolimits.cc
++++ b/lib/radiolimits.cc
+@@ -748,7 +748,7 @@ RadioLimitList::verify(const ConfigItem *item, const QMetaProperty &prop, RadioL
+   // Check counts
+   foreach (QString className, _elements.keys()) {
+     if ((0 <= _minCount[className]) && (counts[className]<_minCount[className])) {
+-      auto &msg = context.newMessage(RadioLimitIssue::Warning);
++      auto &msg = context.newMessage(RadioLimitIssue::Critical);
+       msg << "The number of elements of type '" << className << "' " << counts[className]
+              << " is less than the required count " << _minCount[className] << ".";
+     }
+@@ -799,7 +799,7 @@ RadioLimitRefList::verify(const ConfigItem *item, const QMetaProperty &prop, Rad
+ 
+   const ConfigObjectRefList *plist = prop.read(item).value<ConfigObjectRefList*>();
+   if ((0 <= _minSize) && (_minSize > plist->count())) {
+-    auto &msg = context.newMessage(RadioLimitIssue::Warning);
++    auto &msg = context.newMessage(RadioLimitIssue::Critical);
+     msg << "List '" << prop.name() << "' requires at least " << _minSize
+         << " elements, " << plist->count() << " elements found.";
+     return false;
+diff --git a/lib/rd5r_limits.cc b/lib/rd5r_limits.cc
+index 36c1467..845e49e 100644
+--- a/lib/rd5r_limits.cc
++++ b/lib/rd5r_limits.cc
+@@ -147,7 +147,7 @@ RD5RLimits::RD5RLimits(QObject *parent)
+   /* Define limits for scan lists. */
+   add("scanlists",
+       new RadioLimitList(
+-        ScanList::staticMetaObject, 1, 250, new RadioLimitObject{
++        ScanList::staticMetaObject, 0, 250, new RadioLimitObject{
+           { "name", new RadioLimitString(1, 16, RadioLimitString::ASCII) },
+           { "primary", new RadioLimitObjRef(Channel::staticMetaObject, false) },
+           { "secondary", new RadioLimitObjRef(Channel::staticMetaObject, true) },
+diff --git a/lib/uv390_limits.cc b/lib/uv390_limits.cc
+index 4d058ba..9e2246f 100644
+--- a/lib/uv390_limits.cc
++++ b/lib/uv390_limits.cc
+@@ -145,7 +145,7 @@ UV390Limits::UV390Limits(QObject *parent)
+ 
+   /* Define limits for scan lists. */
+   add("scanlists", new RadioLimitList(
+-        ScanList::staticMetaObject, 1, 250, new RadioLimitObject{
++        ScanList::staticMetaObject, 0, 250, new RadioLimitObject{
+           { "name", new RadioLimitString(1, 16, RadioLimitString::Unicode) },
+           { "primary", new RadioLimitObjRef(Channel::staticMetaObject, true) },
+           { "secondary", new RadioLimitObjRef(Channel::staticMetaObject, true) },
+-- 
+2.49.0
+
